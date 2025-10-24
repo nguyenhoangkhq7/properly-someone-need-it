@@ -78,6 +78,5 @@ const styles = StyleSheet.create({
     height: 70,
     backgroundColor: finalColors.background,
   },
-  // Các style chung khác nếu cần có thể để ở đây, 
-  // nhưng đa số style đã được chuyển vào component con.
+
 });

@@ -1,15 +1,27 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, StyleSheet } from "react-native";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, getFocusedRouteNameFromRoute } from "@react-navigation/native";
 import AppNavigator from "./app/navigator/AppNavigator";
 import BottomNav from "./app/navigator/BottomNav";
 
 export default function App() {
+  const [currentRoute, setCurrentRoute] = useState<string>("Home");
+
+  // Các màn hình cần ẩn thanh BottomNav
+  const hideBottomNavScreens = ["ChatRoom", "SearchResults"];
+
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      onStateChange={(state) => {
+        if (!state) return;
+        const route = state.routes[state.index];
+        const focusedRouteName = getFocusedRouteNameFromRoute(route) ?? route.name;
+        setCurrentRoute(focusedRouteName);
+      }}
+    >
       <View style={styles.container}>
         <AppNavigator />
-        <BottomNav />
+        {!hideBottomNavScreens.includes(currentRoute) && <BottomNav />}
       </View>
     </NavigationContainer>
   );

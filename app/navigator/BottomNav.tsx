@@ -14,7 +14,7 @@ const BottomNav: React.FC = () => {
       {/* Trang chủ */}
       <TouchableOpacity
         style={styles.item}
-        onPress={() => navigation.navigate("Home")}
+        onPress={() => navigation.navigate("HomeStack")}
       >
         <Text style={styles.icon}>🏠</Text>
         <Text style={styles.label}>Trang chủ</Text>
@@ -39,7 +39,7 @@ const BottomNav: React.FC = () => {
       {/* Chat */}
       <TouchableOpacity
         style={styles.item}
-        onPress={() => navigation.navigate("ChatStack")}
+        onPress={() => navigation.navigate("Chat")}
       >
         <Text style={styles.icon}>💬</Text>
         <Text style={styles.label}>Chat</Text>
