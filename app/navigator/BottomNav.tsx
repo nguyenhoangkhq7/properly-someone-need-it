@@ -1,58 +1,54 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
-import type { RootTabParamList } from "../navigator/AppNavigator";
 import colors from "../config/color";
 
-const BottomNav: React.FC = () => {
-  // 👇 Lấy navigation object để chuyển trang
-  const navigation = useNavigation<BottomTabNavigationProp<RootTabParamList>>();
+type BottomNavProps = {
+  state: any;
+  descriptors: any;
+  navigation: any;
+};
+
+const BottomNav: React.FC<BottomNavProps> = ({ state, navigation }) => {
+  const tabs = [
+    { name: "Home", label: "Trang chủ", icon: "🏠" },
+    { name: "Category", label: "Danh mục", icon: "📋" },
+    { name: "Center", label: "", icon: "📷" }, // nút giữa
+    { name: "Chat", label: "Chat", icon: "💬" },
+    { name: "Account", label: "Tài khoản", icon: "👤" },
+  ];
 
   return (
     <View style={styles.container}>
-      {/* Trang chủ */}
-      <TouchableOpacity
-        style={styles.item}
-        onPress={() => navigation.navigate("Home")}
-      >
-        <Text style={styles.icon}>🏠</Text>
-        <Text style={styles.label}>Trang chủ</Text>
-      </TouchableOpacity>
+      {tabs.map((tab, index) => {
+        if (tab.name === "Center") {
+          return (
+            <View key="center" style={styles.centerWrap}>
+              <TouchableOpacity style={styles.centerBtn}>
+                <Text style={styles.centerIcon}>{tab.icon}</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        }
 
-      {/* Danh mục */}
-      <TouchableOpacity
-        style={styles.item}
-        onPress={() => navigation.navigate("Category")}
-      >
-        <Text style={styles.icon}>📋</Text>
-        <Text style={styles.label}>Danh mục</Text>
-      </TouchableOpacity>
+        const isFocused = state.index === index;
 
-      {/* Nút giữa */}
-      <View style={styles.centerWrap}>
-        <TouchableOpacity style={styles.centerBtn}>
-          <Text style={styles.centerIcon}>📷</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Chat */}
-      <TouchableOpacity
-        style={styles.item}
-        onPress={() => navigation.navigate("Chat")}
-      >
-        <Text style={styles.icon}>💬</Text>
-        <Text style={styles.label}>Chat</Text>
-      </TouchableOpacity>
-
-      {/* Tài khoản */}
-      <TouchableOpacity
-        style={styles.item}
-        onPress={() => navigation.navigate("Account")}
-      >
-        <Text style={styles.icon}>👤</Text>
-        <Text style={styles.label}>Tài khoản</Text>
-      </TouchableOpacity>
+        return (
+          <TouchableOpacity
+            key={tab.name}
+            style={styles.item}
+            onPress={() => navigation.navigate(tab.name)}
+          >
+            <Text style={{ ...styles.icon, color: isFocused ? colors.primary : colors.textSecondary }}>
+              {tab.icon}
+            </Text>
+            {tab.label ? (
+              <Text style={{ ...styles.label, color: isFocused ? colors.primary : colors.textSecondary }}>
+                {tab.label}
+              </Text>
+            ) : null}
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 };
@@ -69,8 +65,8 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   item: { alignItems: "center", width: 64 },
-  icon: { fontSize: 20, color: colors.textSecondary },
-  label: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  icon: { fontSize: 20 },
+  label: { fontSize: 11, marginTop: 2 },
 
   centerWrap: {
     position: "absolute",
