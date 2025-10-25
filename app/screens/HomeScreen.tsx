@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, StatusBar, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native"; // ✅ IMPORT DÒNG NÀY
+import { useNavigation } from "@react-navigation/native";
 import colors from "../config/color";
 import Header from "../components/Header";
 import SearchBar from "../components/SearchBar";
@@ -13,14 +13,14 @@ import { featuredProducts, trendingProducts } from "../data/products";
 
 const HomeScreen = () => {
   const [searchQuery, setSearchQuery] = useState("");
-  const navigation = useNavigation<any>(); // ✅ KHỞI TẠO HOOK
+  const navigation = useNavigation<any>();
 
   // ✅ HÀM XỬ LÝ ĐIỀU HƯỚNG TÌM KIẾM
   const handleSearch = () => {
     if (searchQuery.trim()) {
       // Điều hướng đến màn hình SearchResults và truyền query đi
       // Đảm bảo tên màn hình "SearchResults" khớp với tên trong navigator
-      navigation.navigate('SearchResults', { query: searchQuery });
+      navigation.navigate("SearchResults", { query: searchQuery });
     }
   };
 
@@ -40,7 +40,7 @@ const HomeScreen = () => {
           />
           <Banner />
           <CategoryList categories={categories} />
-          
+
           <ProductList
             title="Dành cho bạn"
             products={featuredProducts}
