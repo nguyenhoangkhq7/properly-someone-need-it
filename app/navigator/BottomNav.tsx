@@ -19,19 +19,33 @@ const BottomNav: React.FC<BottomNavProps> = ({ state, navigation }) => {
 
   return (
     <View style={styles.container}>
-      {tabs.map((tab, index) => {
-        if (tab.name === "Center") {
-          return (
-            <View key="center" style={styles.centerWrap}>
-              <TouchableOpacity style={styles.centerBtn}>
-                <Text style={styles.centerIcon}>{tab.icon}</Text>
-              </TouchableOpacity>
-            </View>
-          );
-        }
+      {/* Trang chủ */}
+      <TouchableOpacity
+        style={styles.item}
+        onPress={() => navigation.navigate("HomeStack")}
+      >
+        <Text style={styles.icon}>🏠</Text>
+        <Text style={styles.label}>Trang chủ</Text>
+      </TouchableOpacity>
 
+      {/* Danh mục */}
+      <TouchableOpacity
+        style={styles.item}
+        onPress={() => navigation.navigate("Category")}
+      >
+        <Text style={styles.icon}>📋</Text>
+        <Text style={styles.label}>Danh mục</Text>
+      </TouchableOpacity>
+
+      {/* Nút giữa */}
+      <View style={styles.centerWrap}>
+        <TouchableOpacity style={styles.centerBtn}>
+          <Text style={styles.centerIcon}>📷</Text>
+        </TouchableOpacity>
+      </View>
+      
         const isFocused = state.index === index;
-
+      
         return (
           <TouchableOpacity
             key={tab.name}
