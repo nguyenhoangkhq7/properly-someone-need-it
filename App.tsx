@@ -1,34 +1,33 @@
-import React, { useState } from "react";
-import { View, StyleSheet } from "react-native";
-import { NavigationContainer, getFocusedRouteNameFromRoute } from "@react-navigation/native";
-import AppNavigator from "./app/navigator/AppNavigator";
-import BottomNav from "./app/navigator/BottomNav";
-import RootStack from "./app/navigator/RootStack";
 
-export default function App() {
-  const [currentRoute, setCurrentRoute] = useState<string>("Home");
+// App.tsx
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { AuthProvider, useAuth } from './app/context/AuthContext'; // <-- IMPORT 1
+import AppNavigator from './app/navigator/AppNavigator';
+import AuthNavigator from './app/navigator/AuthNavigator';
+import { StatusBar } from 'react-native';
+import  colors  from './app/config/color';
 
-  // Các màn hình cần ẩn thanh BottomNav
-  const hideBottomNavScreens = ["ChatRoom", "SearchResults"];
+// Component con để quyết định hiển thị Navigator nào
+// Nó phải được đặt BÊN TRONG AuthProvider để có thể dùng useAuth()
+function RootNavigator() {
+  const { userToken } = useAuth(); // <-- Bây giờ hook này sẽ hoạt động
 
   return (
-<NavigationContainer
-  onStateChange={(state) => {
-    if (!state) return;
-    const route = state.routes[state.index];
-    const focusedRouteName = getFocusedRouteNameFromRoute(route) ?? route.name;
-    setCurrentRoute(focusedRouteName);
-  }}
->
-  <View style={styles.container}>
-    <AppNavigator />
-    {!hideBottomNavScreens.includes(currentRoute) && <BottomNav />}
-  </View>
-</NavigationContainer>
+    <NavigationContainer>
+      {userToken ? <AppNavigator /> : <AuthNavigator />}
+    </NavigationContainer>
+  );
+}
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000", // nền đen đồng bộ giao diện
-  },
-});
+// Component App chính
+export default function App() {
+  return (
+    // BỌC TOÀN BỘ ỨNG DỤNG TRONG AUTHPROVIDER
+    <AuthProvider> 
+      <StatusBar barStyle="light-content" backgroundColor={colors.background} />
+      <RootNavigator /> 
+    </AuthProvider>
+  );
+}
+
