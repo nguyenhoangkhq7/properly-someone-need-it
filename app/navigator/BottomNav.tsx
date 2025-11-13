@@ -8,11 +8,17 @@ type BottomNavProps = {
 };
 
 const BottomNav: React.FC<BottomNavProps> = ({ state, navigation }) => {
-  // Lấy route hiện tại
-  const currentRouteName = state.routes[state.index].name;
-
-  // Nếu đang ở Center thì ẩn BottomNav
-  if (currentRouteName === "Center") return null;
+  const currentRoute = state.routes[state.index];
+  
+  // 🔹 Ẩn bottom nav khi đang ở ChatRoom
+  if (
+    currentRoute.name === "Chat" &&
+    currentRoute.state &&
+    currentRoute.state.routes &&
+    currentRoute.state.routes[currentRoute.state.index]?.name === "ChatRoom"
+  ) {
+    return null;
+  }
 
   const tabs = [
     { name: "HomeStack", label: "Trang chủ", icon: "🏠" },
@@ -32,7 +38,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ state, navigation }) => {
             <View key="center" style={styles.centerWrap}>
               <TouchableOpacity
                 style={styles.centerBtn}
-                onPress={() => navigation.navigate("Center", { screen: "PostProduct" })}
+                onPress={() => navigation.navigate("Center")}
               >
                 <Text style={styles.centerIcon}>📷</Text>
               </TouchableOpacity>
@@ -68,6 +74,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ state, navigation }) => {
     </View>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
