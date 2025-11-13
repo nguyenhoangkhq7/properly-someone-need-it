@@ -29,8 +29,14 @@ type ShopScreenRouteProp = RouteProp<HomeStackParamList, "ShopScreen">;
 type Props = { route: ShopScreenRouteProp };
 
 // Component Nút Viền
-const OutlineButton = ({ text }: { text: string }) => (
-  <TouchableOpacity style={styles.outlineButton}>
+const OutlineButton = ({
+  text,
+  onPress,
+}: {
+  text: string;
+  onPress?: () => void;
+}) => (
+  <TouchableOpacity style={styles.outlineButton} onPress={onPress}>
     <Text style={styles.outlineButtonText}>{text}</Text>
   </TouchableOpacity>
 );
@@ -61,7 +67,7 @@ const RatingBar = ({
 
 export default function ShopScreen({ route }: Props) {
   const { shop } = route.params; // nhận shop từ props
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
 
   return (
     <View style={styles.screen}>
@@ -141,7 +147,7 @@ export default function ShopScreen({ route }: Props) {
             </View>
           </View>
 
-          <OutlineButton text={`XEM TẤT CẢ SẢN PHẨM (${shop.totalProducts})`} />
+          <OutlineButton onPress={()=> navigation.navigate("HomeStack", {screen: "SearchResults"})} text={`XEM TẤT CẢ SẢN PHẨM (${shop.totalProducts})`} />
         </View>
 
         <View style={styles.divider} />
@@ -209,7 +215,7 @@ export default function ShopScreen({ route }: Props) {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Sản phẩm từ người bán này</Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={()=> navigation.navigate("HomeStack", {screen: "SearchResults"})}>
               <Text style={styles.seeAllText}>Xem tất cả</Text>
             </TouchableOpacity>
           </View>
@@ -225,7 +231,7 @@ export default function ShopScreen({ route }: Props) {
               contentContainerStyle={{ paddingLeft: 12 }}
             />
           </View>
-          <OutlineButton text="HIỂN THỊ THÊM" />
+          <OutlineButton text="HIỂN THỊ THÊM" onPress={()=> navigation.navigate("HomeStack", {screen: "SearchResults"})}/>
         </View>
         <View style={{ height: 50 }} />
       </ScrollView>
