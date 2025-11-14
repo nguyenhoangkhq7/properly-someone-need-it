@@ -138,7 +138,7 @@ export default function ShopScreen({ route }: Props) {
               <Text style={styles.badgeText}>Gửi nhanh</Text>
             </View>
             <View style={styles.badge}>
-              <MaterialIcon
+              <MaterialIcon 
                 name="shield-check-outline"
                 size={24}
                 color={colors.textSecondary}
@@ -206,7 +206,7 @@ export default function ShopScreen({ route }: Props) {
         />
 
         <View style={styles.section}>
-          <OutlineButton text="TẤT CẢ ĐÁNH GIÁ" />
+          <OutlineButton onPress={()=> navigation.navigate("AllRatingScreen")} text="TẤT CẢ ĐÁNH GIÁ" />
         </View>
 
         <View style={styles.divider} />

@@ -4,7 +4,7 @@ import PostProductDetailScreen from "../screens/PostProductDetailScreen";
 import ShippingDetailScreen from "../screens/ShippingDetailScreen";
 export type CameraStackParamList = {
     PostProduct: undefined;
-    PostProductDetail: undefined;
+    PostProductDetail:{product:any} | undefined;
     ShippingDetailScreen: undefined;
 };
 

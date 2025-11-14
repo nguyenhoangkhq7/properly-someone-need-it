@@ -14,8 +14,11 @@ import {
 // Sử dụng icon từ react-native-vector-icons
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Feather from 'react-native-vector-icons/Feather';
-import { useNavigation } from '@react-navigation/native';
+import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import colors from "../config/color";
+import { CameraStackParamList } from '../navigator/CameraNavigator';
+
+type PostProductDetailScreenProps = RouteProp<CameraStackParamList, 'PostProductDetail'>;
 
 // Placeholder cho ảnh bìa
 const COVER_IMAGE_PLACEHOLDER = {
@@ -59,6 +62,12 @@ const ConditionButton = ({
 );
 
 export default function ProductDetailScreen() {
+
+  const navigation= useNavigation<any>();
+  const route= useRoute<PostProductDetailScreenProps>();
+  const product= route.params?.product;
+
+
   const [selectedCondition, setSelectedCondition] = useState<string | null>(
     null
   );
@@ -69,8 +78,6 @@ export default function ProductDetailScreen() {
   const handleQuantityChange = (amount: number) => {
     setQuantity((prev) => Math.max(1, prev + amount)); // Đảm bảo số lượng không dưới 1
   };
-
-  const navigation= useNavigation<any>();
 
   const handleZeroDongSwitch = (newValue: boolean) => {
     setIsZeroDongProduct(newValue);

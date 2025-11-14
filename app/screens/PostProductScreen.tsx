@@ -15,6 +15,7 @@
   import MaterialIcon from "react-native-vector-icons/MaterialIcons";
   import { useNavigation } from "@react-navigation/native";
   import colors from "../config/color";
+import { Product } from "../data/products";
 
   // Hình ảnh placeholder cho nền camera.
   // Trong một ứng dụng thật, đây sẽ là component <CameraView>.
@@ -68,10 +69,29 @@
     />
   );
 
+
   export default function PostProductScreen() {
     const [modalVisible, setModalVisible] = useState(true);
     const [dontShowAgain, setDontShowAgain] = useState(false);
     const navigation = useNavigation<any>();
+
+    const [product, setProduct]= useState<Product>({
+        id: "",
+        title: "",
+        price: "",
+        originalPrice: "",
+        discount: "",
+        image: "", //thay ảnh camera khi thực hiện thục tế
+        category: "",
+      });
+
+        // Hàm xử lý khi nhấn nút chụp ảnh (giả lập)
+    const handleCamera = (imgUrl:string) => {
+      console.log("Chụp ảnh (giả lập)"); 
+      setProduct({
+        ...product, image: imgUrl, //new image url
+      })
+    }
 
     return (
       <View style={styles.screen}>
@@ -128,7 +148,7 @@
               <TouchableOpacity style={styles.controlButton}>
                 <Icon name="flash-off-outline" size={28} color="white" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.captureButton}>
+              <TouchableOpacity style={styles.captureButton} onPress={() => handleCamera('https://images.dubizzle.com.eg/thumbnails/129930685-800x600.jpeg')}>
                 <Icon name="camera-outline" size={36} color="#333" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.controlButton}>
