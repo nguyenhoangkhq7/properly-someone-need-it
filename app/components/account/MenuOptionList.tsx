@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
   },
   optionCard: {
     backgroundColor: finalColors.surface,
-    borderRadius: 20,
+borderRadius: 20,
     borderWidth: 1,
     borderColor: finalColors.border,
   },
