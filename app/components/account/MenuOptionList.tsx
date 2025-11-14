@@ -38,7 +38,7 @@ export default function MenuOptionList({ title, list }: MenuOptionListProps) {
                 titleStyle={{ color: finalColors.text, fontWeight: item.isWarning ? "700" : "400" }}
                 left={() => (
                   <MaterialCommunityIcons
-                    name={item.icon}
+                    // name={item.icon}
                     size={22} 
                     color={
                       item.isContact

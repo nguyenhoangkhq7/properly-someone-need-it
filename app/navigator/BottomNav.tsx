@@ -8,6 +8,26 @@ type BottomNavProps = {
 };
 
 const BottomNav: React.FC<BottomNavProps> = ({ state, navigation }) => {
+  const currentTab = state.routes[state.index];
+
+  // 🟦 Lấy màn hiện tại trong nested stack
+  const nestedRoute =
+    currentTab.state?.routes?.[currentTab.state.index]?.name || currentTab.name;
+
+  // 🛑 Danh sách các màn cần ẩn bottom nav
+  const hiddenRoutes = [
+    "ChatRoom",
+    "PostProduct",
+    "PostProductDetail",
+    "ShippingDetailScreen",
+    "Center"
+  ];
+
+  // 🔥 Nếu tên màn nằm trong hiddenRoutes → ẩn tab bar
+  if (hiddenRoutes.includes(nestedRoute)) {
+    return null;
+  }
+
   const tabs = [
     { name: "HomeStack", label: "Trang chủ", icon: "🏠" },
     { name: "Category", label: "Danh mục", icon: "📋" },
@@ -24,7 +44,10 @@ const BottomNav: React.FC<BottomNavProps> = ({ state, navigation }) => {
         if (tab.name === "Center") {
           return (
             <View key="center" style={styles.centerWrap}>
-              <TouchableOpacity style={styles.centerBtn}>
+              <TouchableOpacity
+                style={styles.centerBtn}
+                onPress={() => navigation.navigate("Center", {screen:"PostProduct"})}
+              >
                 <Text style={styles.centerIcon}>📷</Text>
               </TouchableOpacity>
             </View>

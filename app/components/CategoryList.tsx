@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 import colors from "../config/color";
+import { useNavigation } from "@react-navigation/native";
 
 export interface Category {
   id: string;
@@ -19,8 +20,14 @@ interface CategoryListProps {
 }
 
 const CategoryList: React.FC<CategoryListProps> = ({ categories }) => {
+  const navigation=useNavigation<any>();
   const renderItem = ({ item }: { item: Category }) => (
-    <TouchableOpacity style={styles.categoryItem}>
+    <TouchableOpacity style={styles.categoryItem} onPress={() => {
+        navigation.navigate("HomeStack", {
+          screen: "SearchResults",
+          params: { category: item.name },
+        });
+      }}>
       <Text style={styles.categoryIcon}>{item.icon}</Text>
       <Text style={styles.categoryName}>{item.name}</Text>
     </TouchableOpacity>

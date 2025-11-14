@@ -48,8 +48,8 @@ const OtherProductCard = ({
 );
 
 export default function ProductDetailScreen() {
-  const navigation =
-    useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  // const navigation =useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  const navigation= useNavigation<any>();
   const route = useRoute<ProductDetailScreenRouteProp>();
   const { product } = route.params; // Nhận product từ ProductList
 
@@ -177,7 +177,13 @@ export default function ProductDetailScreen() {
             >
               <Text style={styles.sellerButtonText}>XEM SHOP</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.sellerButton}>
+            <TouchableOpacity 
+              style={styles.sellerButton}
+              onPress={()=> navigation.navigate("HomeStack", {
+                screen: "SearchResults",
+                // params: { query: "Tuấn Phú" },
+              })}
+            >
               <Text style={styles.sellerButtonText}>SẢN PHẨM (70)</Text>
             </TouchableOpacity>
           </View>
@@ -189,7 +195,7 @@ export default function ProductDetailScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Sản phẩm khác của shop</Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={()=> navigation.navigate("HomeStack", {screen: "SearchResults"})}>
               <Text style={styles.seeAllText}>Xem tất cả</Text>
             </TouchableOpacity>
           </View>
