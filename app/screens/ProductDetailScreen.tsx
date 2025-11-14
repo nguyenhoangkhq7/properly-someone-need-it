@@ -9,23 +9,25 @@ import {
   TouchableOpacity,
   StatusBar,
   Dimensions,
-  FlatList
+  FlatList,
 } from "react-native";
 import { RouteProp, useRoute } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/Ionicons";
 import colors from "../config/color";
-import { RootStackParamList } from "../navigator/RootStack";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { trendingProducts } from "../data/products";
 import ProductItem from "../components/ProductItem"; // component dùng chung
-import { Shop,shop } from "../data/shops";
+import { shop } from "../data/shops";
+import type { HomeStackParamList } from "../navigator/HomeNavigator";
 
 const { width } = Dimensions.get("window");
 
-
 // Định nghĩa type cho route
-type ProductDetailScreenRouteProp = RouteProp<RootStackParamList, "ProductDetail">;
+type ProductDetailScreenRouteProp = RouteProp<
+  HomeStackParamList,
+  "ProductDetail"
+>;
 
 const OtherProductCard = ({
   imageUri,
@@ -46,7 +48,8 @@ const OtherProductCard = ({
 );
 
 export default function ProductDetailScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  // const navigation =useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  const navigation= useNavigation<any>();
   const route = useRoute<ProductDetailScreenRouteProp>();
   const { product } = route.params; // Nhận product từ ProductList
 
@@ -62,7 +65,10 @@ export default function ProductDetailScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={() => navigation.goBack()}
+        >
           <Icon name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerIcons}>
@@ -72,7 +78,6 @@ export default function ProductDetailScreen() {
           <TouchableOpacity style={styles.headerButton}>
             <Icon name="chatbubble-outline" size={24} color={colors.text} />
           </TouchableOpacity>
-
         </View>
       </View>
 
@@ -99,9 +104,7 @@ export default function ProductDetailScreen() {
               <Text style={styles.tagText}>{product.discount}</Text>
             </View>
           )}
-          {product.originalPrice && (
-            <Text>{product.originalPrice}</Text>
-          )}
+          {product.originalPrice && <Text>{product.originalPrice}</Text>}
         </View>
 
         <View style={styles.divider} />
@@ -163,15 +166,24 @@ export default function ProductDetailScreen() {
             <View style={styles.sellerDetails}>
               <Text style={styles.sellerName}>Tuấn Phú</Text>
               <Text style={styles.sellerStats}>
-                0 Đã bán  •  0 Đánh giá (0/5)
+                0 Đã bán • 0 Đánh giá (0/5)
               </Text>
             </View>
           </View>
           <View style={styles.sellerButtons}>
-            <TouchableOpacity style={styles.sellerButton} onPress={() => navigation.navigate("ShopScreen", { shop })}>
+            <TouchableOpacity
+              style={styles.sellerButton}
+              onPress={() => navigation.navigate("ShopScreen", { shop })}
+            >
               <Text style={styles.sellerButtonText}>XEM SHOP</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.sellerButton}>
+            <TouchableOpacity 
+              style={styles.sellerButton}
+              onPress={()=> navigation.navigate("HomeStack", {
+                screen: "SearchResults",
+                // params: { query: "Tuấn Phú" },
+              })}
+            >
               <Text style={styles.sellerButtonText}>SẢN PHẨM (70)</Text>
             </TouchableOpacity>
           </View>
@@ -183,7 +195,7 @@ export default function ProductDetailScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Sản phẩm khác của shop</Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={()=> navigation.navigate("HomeStack", {screen: "SearchResults"})}>
               <Text style={styles.seeAllText}>Xem tất cả</Text>
             </TouchableOpacity>
           </View>
@@ -197,7 +209,6 @@ export default function ProductDetailScreen() {
             contentContainerStyle={{ paddingLeft: 12 }}
           />
         </View>
-
       </ScrollView>
 
       {/* Footer Buttons */}
@@ -213,7 +224,6 @@ export default function ProductDetailScreen() {
     </View>
   );
 }
-
 
 const styles = StyleSheet.create({
   screen: {
@@ -467,8 +477,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   bulletPoint: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginVertical: 4,
   },
   bulletText: {

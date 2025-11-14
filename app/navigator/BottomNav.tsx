@@ -4,62 +4,78 @@ import colors from "../config/color";
 
 type BottomNavProps = {
   state: any;
-  descriptors: any;
   navigation: any;
 };
 
 const BottomNav: React.FC<BottomNavProps> = ({ state, navigation }) => {
+  const currentTab = state.routes[state.index];
+
+  // 🟦 Lấy màn hiện tại trong nested stack
+  const nestedRoute =
+    currentTab.state?.routes?.[currentTab.state.index]?.name || currentTab.name;
+
+  // 🛑 Danh sách các màn cần ẩn bottom nav
+  const hiddenRoutes = [
+    "ChatRoom",
+    "PostProduct",
+    "PostProductDetail",
+    "ShippingDetailScreen",
+    "Center"
+  ];
+
+  // 🔥 Nếu tên màn nằm trong hiddenRoutes → ẩn tab bar
+  if (hiddenRoutes.includes(nestedRoute)) {
+    return null;
+  }
+
   const tabs = [
-    { name: "Home", label: "Trang chủ", icon: "🏠" },
+    { name: "HomeStack", label: "Trang chủ", icon: "🏠" },
     { name: "Category", label: "Danh mục", icon: "📋" },
-    { name: "Center", label: "", icon: "📷" }, // nút giữa
+    { name: "Center", label: "", icon: "📷" },
     { name: "Chat", label: "Chat", icon: "💬" },
     { name: "Account", label: "Tài khoản", icon: "👤" },
   ];
 
   return (
     <View style={styles.container}>
-      {/* Trang chủ */}
-      <TouchableOpacity
-        style={styles.item}
-        onPress={() => navigation.navigate("HomeStack")}
-      >
-        <Text style={styles.icon}>🏠</Text>
-        <Text style={styles.label}>Trang chủ</Text>
-      </TouchableOpacity>
-
-      {/* Danh mục */}
-      <TouchableOpacity
-        style={styles.item}
-        onPress={() => navigation.navigate("Category")}
-      >
-        <Text style={styles.icon}>📋</Text>
-        <Text style={styles.label}>Danh mục</Text>
-      </TouchableOpacity>
-
-      {/* Nút giữa */}
-      <View style={styles.centerWrap}>
-        <TouchableOpacity style={styles.centerBtn}>
-          <Text style={styles.centerIcon}>📷</Text>
-        </TouchableOpacity>
-      </View>
-      
+      {tabs.map((tab, index) => {
         const isFocused = state.index === index;
-      
+
+        if (tab.name === "Center") {
+          return (
+            <View key="center" style={styles.centerWrap}>
+              <TouchableOpacity
+                style={styles.centerBtn}
+                onPress={() => navigation.navigate("Center", {screen:"PostProduct"})}
+              >
+                <Text style={styles.centerIcon}>📷</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        }
+
         return (
           <TouchableOpacity
             key={tab.name}
             style={styles.item}
             onPress={() => navigation.navigate(tab.name)}
           >
-            <Text style={{ ...styles.icon, color: isFocused ? colors.primary : colors.textSecondary }}>
+            <Text
+              style={{
+                ...styles.icon,
+                color: isFocused ? colors.primary : colors.textSecondary,
+              }}
+            >
               {tab.icon}
             </Text>
-            {tab.label ? (
-              <Text style={{ ...styles.label, color: isFocused ? colors.primary : colors.textSecondary }}>
-                {tab.label}
-              </Text>
-            ) : null}
+            <Text
+              style={{
+                ...styles.label,
+                color: isFocused ? colors.primary : colors.textSecondary,
+              }}
+            >
+              {tab.label}
+            </Text>
           </TouchableOpacity>
         );
       })}
@@ -81,7 +97,6 @@ const styles = StyleSheet.create({
   item: { alignItems: "center", width: 64 },
   icon: { fontSize: 20 },
   label: { fontSize: 11, marginTop: 2 },
-
   centerWrap: {
     position: "absolute",
     left: 0,

@@ -12,7 +12,7 @@ import colors from "../config/color";
 import { Product } from "../data/products";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RootStackParamList } from "../navigator/RootStack";
+import type { HomeStackParamList } from "../navigator/HomeNavigator";
 
 const { width } = Dimensions.get("window");
 const cardWidth = (width - 48) / 2;
@@ -23,7 +23,8 @@ interface Props {
 }
 
 export default function ProductItem({ product, horizontal = false }: Props) {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
 
   return (
     <TouchableOpacity

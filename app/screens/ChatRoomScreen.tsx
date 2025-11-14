@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect,useLayoutEffect  } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Ionicons, Feather } from "@expo/vector-icons"; // Thêm Feather cho icon gọi/gửi file
 import colors from "../config/color";
+import { useNavigation } from "@react-navigation/native";
 
 interface Message {
     id: string;
@@ -41,6 +42,16 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   ]);
   const [inputText, setInputText] = useState("");
   const flatListRef = useRef<FlatList<Message>>(null);
+
+  useLayoutEffect(() => {
+    // Ẩn bottom tab bar khi vào chat room
+    navigation.getParent()?.setOptions({ tabBarStyle: { display: "none" } });
+
+    // Khôi phục lại khi thoát
+    return () => {
+      navigation.getParent()?.setOptions({ tabBarStyle: { display: "flex" } });
+    };
+  }, [navigation]);
 
   const sendMessage = () => {
     if (inputText.trim() === "") return;
