@@ -1,7 +1,8 @@
 import React from "react";
 import { View, StyleSheet } from "react-native";
 import { Card, Text } from "react-native-paper";
-import colors from "../../config/color"; // Giả định đường dẫn này
+import colors from "../../config/color";
+import type { AuthUser } from "../../context/AuthContext";
 
 const finalColors = {
     ...colors,
@@ -9,16 +10,26 @@ const finalColors = {
     contact: "#00FFFF",
 };
 
-export default function StatsBalanceSection() {
+interface StatsBalanceSectionProps {
+  user: AuthUser | null;
+}
+
+export default function StatsBalanceSection({ user }: StatsBalanceSectionProps) {
+  const stats = [
+    { label: "Đánh giá", value: (user?.rating ?? 0).toFixed(1) },
+    { label: "Đã bán", value: String(user?.successfulTrades ?? 0) },
+    { label: "Nhận xét", value: String(user?.reviewCount ?? 0) },
+    { label: "Tin cậy", value: `${user?.trustScore ?? 0}%` },
+  ];
   return (
     <>
       {/* Stats */}
       <Card style={styles.statsCard}>
         <Card.Content style={styles.statsRow}>
-          {["Yêu thích", "Đang bán", "Đã bán", "Độ tin cậy"].map((label, i) => (
-            <View key={i} style={styles.statItem}>
-              <Text style={styles.statNumber}>0</Text>
-              <Text style={styles.statLabel}>{label}</Text>
+          {stats.map((item) => (
+            <View key={item.label} style={styles.statItem}>
+              <Text style={styles.statNumber}>{item.value}</Text>
+              <Text style={styles.statLabel}>{item.label}</Text>
             </View>
           ))}
         </Card.Content>

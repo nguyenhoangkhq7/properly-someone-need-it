@@ -40,7 +40,9 @@ export default function ChatListScreen() {
         unreadCount: index === 0 ? 3 : (index === 2 ? 1 : 0), 
     }));
 
-    const renderItem = ({ item }: { item: ChatItem }) => (
+    const renderItem = ({ item }: { item: ChatItem }) => {
+        const unreadCount = item.unreadCount ?? 0;
+        return (
         <TouchableOpacity
             style={styles.chatItem}
             onPress={() => navigation.navigate("ChatRoom", { chat: item })}
@@ -52,8 +54,7 @@ export default function ChatListScreen() {
                 <Text 
                     style={[
                         styles.lastMessage, 
-                        // ✅ SỬA LỖI: Chỉ áp dụng styles.unreadLastMessage nếu count > 0
-                        item.unreadCount > 0 && styles.unreadLastMessage
+                        unreadCount > 0 && styles.unreadLastMessage
                     ]} 
                     numberOfLines={1}
                 >
@@ -63,14 +64,15 @@ export default function ChatListScreen() {
 
             <View style={styles.metaContainer}>
                 <Text style={styles.time}>{item.time}</Text>
-                {item.unreadCount > 0 && (
+                {unreadCount > 0 && (
                     <View style={styles.unreadBadge}>
-                        <Text style={styles.unreadCountText}>{item.unreadCount > 99 ? '99+' : item.unreadCount}</Text>
+                        <Text style={styles.unreadCountText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
                     </View>
                 )}
             </View>
         </TouchableOpacity>
     );
+    };
 
     return (
         <View style={styles.container}>

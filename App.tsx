@@ -7,8 +7,6 @@ import AuthNavigator from './app/navigator/AuthNavigator';
 import { StatusBar } from 'react-native';
 import  colors  from './app/config/color';
 
-// Component con để quyết định hiển thị Navigator nào
-// Nó phải được đặt BÊN TRONG AuthProvider để có thể dùng useAuth()
 function RootNavigator() {
   const { userToken } = useAuth(); // <-- Bây giờ hook này sẽ hoạt động
 
