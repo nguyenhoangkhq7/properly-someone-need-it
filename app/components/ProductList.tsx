@@ -6,7 +6,7 @@ import ProductItem from "./ProductItem";
 
 interface Props {
   title: string;
-  products: Item[];
+  products: Array<Item & { distanceKm?: number }>;
   horizontal?: boolean;
   onSeeAll?: () => void;
 }

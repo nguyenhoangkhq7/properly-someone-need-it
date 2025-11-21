@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -17,11 +16,10 @@ import type { Item } from "../types/Item";
 import { getLocationLabelAsync, getLocationLabel } from "../utils/locationLabel";
 
 const { width } = Dimensions.get("window");
-// Nới rộng thẻ thêm một chút để nội dung dễ đọc hơn
 const cardWidth = (width - 40) / 2;
 
 interface Props {
-  product: Item;
+  product: Item & { distanceKm?: number };
   horizontal?: boolean;
 }
 
@@ -32,6 +30,7 @@ export default function ProductItem({ product, horizontal = false }: Props) {
   const [locationLabel, setLocationLabel] = useState(
     getLocationLabel(product.location)
   );
+  const hasDistance = Number.isFinite(product.distanceKm);
 
   useEffect(() => {
     let mounted = true;
@@ -42,6 +41,8 @@ export default function ProductItem({ product, horizontal = false }: Props) {
       mounted = false;
     };
   }, [product.location]);
+
+  const locationText = locationLabel;
 
   return (
     <TouchableOpacity
@@ -63,10 +64,24 @@ export default function ProductItem({ product, horizontal = false }: Props) {
       <View style={styles.priceRow}>
         <View style={styles.priceTag}>
           <Text style={styles.price} numberOfLines={1} ellipsizeMode="tail">
-            {product.price.toLocaleString()} đ
+            {product.price.toLocaleString()} d
           </Text>
         </View>
       </View>
+
+      {hasDistance && (
+        <View style={styles.distancePill}>
+          <Ionicons
+            name="navigate-outline"
+            size={14}
+            color={colors.primary}
+            style={styles.distanceIcon}
+          />
+          <Text style={styles.distanceText} numberOfLines={1}>
+            {`Cach ban ~${product.distanceKm} km`}
+          </Text>
+        </View>
+      )}
 
       <View style={styles.metaRow}>
         <Ionicons
@@ -76,7 +91,7 @@ export default function ProductItem({ product, horizontal = false }: Props) {
           style={styles.metaIcon}
         />
         <Text style={styles.locationText} numberOfLines={1}>
-          {locationLabel}
+          {locationText}
         </Text>
       </View>
     </TouchableOpacity>
@@ -129,6 +144,26 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 14,
     maxWidth: 150,
+  },
+  distancePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#141511",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  distanceIcon: {
+    marginRight: 6,
+  },
+  distanceText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: "700",
   },
   metaRow: {
     flexDirection: "row",

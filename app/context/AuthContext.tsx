@@ -3,6 +3,7 @@ import React, { createContext, useState, useContext, ReactNode, useEffect } from
 // import AsyncStorage from '@react-native-async-storage/async-storage';
 import  colors  from '../config/color'; // Đường dẫn tới file màu của bạn
 import { View, ActivityIndicator } from 'react-native';
+import { UserProvider } from './UserContext';
 
 interface AuthContextType {
   userToken: string | null;
@@ -64,7 +65,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Khi hết loading, cung cấp context cho các component con
   return (
     <AuthContext.Provider value={{ userToken, login, logout, isLoading }}>
-      {children}
+      <UserProvider>{children}</UserProvider>
     </AuthContext.Provider>
   );
 };

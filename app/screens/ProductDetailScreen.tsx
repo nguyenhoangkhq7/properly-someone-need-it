@@ -21,6 +21,7 @@ import type { Item } from "../types/Item";
 import type { SavedItem } from "../types/SavedItem";
 import { productApi } from "../api/productApi";
 import { getLocationLabel } from "../utils/locationLabel";
+import { useUser } from "../context/UserContext";
 
 const { width } = Dimensions.get("window");
 
@@ -28,6 +29,8 @@ type ProductDetailScreenRouteProp = RouteProp<
   HomeStackParamList,
   "ProductDetail"
 >;
+
+type ItemWithDistance = Item & { distanceKm?: number };
 
 const conditionLabel: Record<Item["condition"], string> = {
   LIKE_NEW: "Như mới",
@@ -43,20 +46,57 @@ const statusLabel: Record<Item["status"], string> = {
   DELETED: "Đã xóa",
 };
 
+const lazyRequire = (name: string) => {
+  try {
+    // eslint-disable-next-line no-eval
+    const req = eval("require");
+    return req(name);
+  } catch (_e) {
+    return null;
+  }
+};
+
+const fallbackCoords = { lat: 21.0285, lng: 105.8542 }; // Hanoi center fallback
+const haversineKm = (
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number }
+) => {
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+  return R * c;
+};
+
 export default function ProductDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<ProductDetailScreenRouteProp>();
   const { product: initialProduct } = route.params;
+  const { user } = useUser();
 
-  const [product, setProduct] = useState<Item | null>(initialProduct as Item);
+  const [product, setProduct] = useState<ItemWithDistance | null>(
+    initialProduct as ItemWithDistance
+  );
   const [related, setRelated] = useState<Item[]>([]);
   const [savedItem, setSavedItem] = useState<SavedItem | null>(null);
+  const [distanceKm, setDistanceKm] = useState<number | null>(
+    (initialProduct as ItemWithDistance)?.distanceKm ?? null
+  );
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
+    null
+  );
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const fresh = await productApi.getById(initialProduct._id);
+        const fresh = await productApi.getById(initialProduct._id, user?._id);
         if (mounted && fresh) setProduct(fresh);
       } catch (e) {
         // giữ nguyên dữ liệu khi lỗi
@@ -65,24 +105,54 @@ export default function ProductDetailScreen() {
     return () => {
       mounted = false;
     };
-  }, [initialProduct._id]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const list = await productApi.getByCategory(initialProduct.category);
-        setRelated(list.filter((p) => p._id !== initialProduct._id).slice(0, 10));
-      } catch (e) {
-        setRelated([]);
-      }
-    })();
-  }, [initialProduct._id, initialProduct.category]);
+  }, [initialProduct._id, user?._id]);
 
   const images = useMemo(
     () => (product?.images?.length ? product.images : []),
     [product]
   );
   const locationLabel = getLocationLabel(product?.location);
+  const coordKey = JSON.stringify(product?.location?.coordinates || []);
+
+  const resolveLocation = async () => {
+    const Location = lazyRequire("expo-location");
+    if (!Location) return null;
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm || perm.status !== "granted") return null;
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      return {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      };
+    } catch (_e) {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      if (distanceKm != null) return;
+      const c = product?.location?.coordinates;
+      if (!c || c.length < 2) return;
+      const loc = coords || (await resolveLocation()) || fallbackCoords;
+      if (!coords) setCoords(loc);
+      const [lng, lat] = c;
+      const km = haversineKm(loc, { lat, lng });
+      if (active) setDistanceKm(Math.round(km * 10) / 10);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [coordKey, distanceKm, coords]);
+
+  const locationText =
+    distanceKm != null
+      ? `${locationLabel} - Khoảng cách ~${distanceKm} km`
+      : locationLabel;
 
   const handleMessagePress = (preset?: string) => {
     const chatPayload = {
@@ -170,13 +240,13 @@ export default function ProductDetailScreen() {
           </Text>
           <View style={styles.detailRow}>
             <Icon
-              name="location-outline"
-              size={16}
-              color={colors.textSecondary}
-              style={{ marginRight: 4 }}
-            />
-            <Text style={styles.detailValue}>{locationLabel}</Text>
-          </View>
+          name="location-outline"
+          size={16}
+          color={colors.textSecondary}
+          style={{ marginRight: 4 }}
+        />
+        <Text style={styles.detailValue}>{locationText}</Text>
+      </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Trạng thái:</Text>
             <Text style={styles.detailValue}>
@@ -184,14 +254,6 @@ export default function ProductDetailScreen() {
             </Text>
           </View>
           <View style={styles.ctaRow}>
-            <TouchableOpacity
-              style={[styles.ctaSecondary, styles.ctaSpacing]}
-              onPress={handleToggleSave}
-            >
-              <Text style={styles.ctaSecondaryText}>
-                {savedItem ? "Đã lưu" : "Lưu"}
-              </Text>
-            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.ctaPrimary, styles.ctaSpacing]}
               onPress={() =>
@@ -406,22 +468,6 @@ const styles = StyleSheet.create({
   },
   ctaSpacing: {
     marginRight: 8,
-  },
-  ctaSecondary: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    backgroundColor: colors.surface,
-  },
-  ctaSecondaryText: {
-    color: colors.primary,
-    fontWeight: "700",
-    fontSize: 13,
-    textTransform: "uppercase",
   },
   ctaPrimary: {
     flex: 1,

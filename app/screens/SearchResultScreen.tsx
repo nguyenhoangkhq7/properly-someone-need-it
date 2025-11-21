@@ -1,5 +1,5 @@
-// screens/SearchResultScreen.tsx
-import React, { useEffect, useMemo, useState } from "react";
+﻿// screens/SearchResultScreen.tsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, FlatList, StyleSheet } from "react-native";
 import SearchHeader from "../components/SearchHeader";
 import FilterSortBar from "../components/FilterSortBar";
@@ -7,31 +7,76 @@ import ProductCard from "../components/ProductCard";
 import colors from "../config/color";
 import { productApi } from "../api/productApi";
 import type { Item } from "../types/Item";
+import { useUser } from "../context/UserContext";
 
 const finalColors = {
   ...colors,
   background: colors.background || "#0A0A0A",
 };
 
+type ItemWithScore = Item & { similarity?: number; distanceKm?: number };
+
 export default function SearchResultsScreen({ route, navigation }: any) {
   const { query, category } = route.params || {};
+  const { user } = useUser();
+  const userId = user?._id;
 
   const [searchText, setSearchText] = useState<string>(query || "");
-  const [items, setItems] = useState<Item[]>([]);
-  const [filtered, setFiltered] = useState<Item[]>([]);
+  const [items, setItems] = useState<ItemWithScore[]>([]);
+  const [filtered, setFiltered] = useState<ItemWithScore[]>([]);
   const [activeFilter, setActiveFilter] = useState<string>("all"); // all | zeroPrice
   const [sortType, setSortType] = useState<string>("default"); // default | priceAsc | priceDesc | newest
   const [loading, setLoading] = useState(false);
   const [nearMe, setNearMe] = useState(false);
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const lastRequestedQuery = useRef<string>("");
 
-  const userLocation = { lat: 21.0285, lng: 105.8542 }; // placeholder: Hà Nội centro
+  const fallbackCoords = { lat: 21.0285, lng: 105.8542 }; // Hanoi center
 
-  const fetchData = async () => {
+  const lazyRequire = (name: string) => {
     try {
-      setLoading(true);
-      const data = await productApi.getAll();
-      setItems(data);
+      // eslint-disable-next-line no-eval
+      const req = eval("require");
+      return req(name);
+    } catch (_e) {
+      return null;
+    }
+  };
+
+  const resolveLocation = async () => {
+    const Location = lazyRequire("expo-location");
+    if (!Location) return null;
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm || perm.status !== "granted") return null;
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      return {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      };
+    } catch (_e) {
+      return null;
+    }
+  };
+
+  const fetchSemantic = async (text?: string) => {
+    const currentQuery = (text ?? searchText).trim();
+    lastRequestedQuery.current = currentQuery;
+    setLoading(true);
+    try {
+      let data: ItemWithScore[] = [];
+      if (currentQuery) {
+        data = await productApi.search(currentQuery, userId, 50);
+      } else {
+        data = await productApi.getAll();
+      }
+      if (lastRequestedQuery.current === currentQuery) {
+        setItems(data);
+      }
     } catch (e) {
+      console.warn("semantic search error", e);
       setItems([]);
     } finally {
       setLoading(false);
@@ -39,11 +84,18 @@ export default function SearchResultsScreen({ route, navigation }: any) {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    fetchSemantic(query || "");
+  }, [query]);
+
+  useEffect(() => {
+    if (!nearMe || coords) return;
+    resolveLocation().then((loc) => {
+      if (loc) setCoords(loc);
+    });
+  }, [nearMe, coords]);
 
   const filteredData = useMemo(() => {
-    let data = [...items];
+    let data: ItemWithScore[] = [...items];
     const toRad = (d: number) => (d * Math.PI) / 180;
     const distanceKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
       const R = 6371;
@@ -51,20 +103,9 @@ export default function SearchResultsScreen({ route, navigation }: any) {
       const dLon = toRad(b.lng - a.lng);
       const lat1 = toRad(a.lat);
       const lat2 = toRad(b.lat);
-      const h =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
       return 2 * R * Math.asin(Math.sqrt(h));
     };
-
-    if (searchText) {
-      const kw = searchText.toLowerCase();
-      data = data.filter(
-        (p) =>
-          p.title.toLowerCase().includes(kw) ||
-          p.description.toLowerCase().includes(kw)
-      );
-    }
 
     if (category) {
       data = data.filter((p) => p.category === category);
@@ -75,11 +116,15 @@ export default function SearchResultsScreen({ route, navigation }: any) {
     }
 
     if (nearMe) {
-      data = data.filter((p) => {
-        if (!p.location?.coordinates?.length) return false;
-        const [lng, lat] = p.location.coordinates;
-        return distanceKm(userLocation, { lat, lng }) <= 5;
-      });
+      const origin = coords || fallbackCoords;
+      data = data
+        .map((p) => {
+          if (!p.location?.coordinates?.length) return null;
+          const [lng, lat] = p.location.coordinates;
+          const km = distanceKm(origin, { lat, lng });
+          return { ...p, distanceKm: Math.round(km * 10) / 10 };
+        })
+        .filter((p) => p && p.distanceKm !== undefined && p.distanceKm <= 5) as ItemWithScore[];
     }
 
     if (sortType === "priceAsc") {
@@ -87,18 +132,19 @@ export default function SearchResultsScreen({ route, navigation }: any) {
     } else if (sortType === "priceDesc") {
       data.sort((a, b) => b.price - a.price);
     } else if (sortType === "newest") {
-      data.sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
+      data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
 
     return data;
-  }, [items, searchText, category, activeFilter, sortType]);
+  }, [items, category, activeFilter, sortType, nearMe, coords]);
 
   useEffect(() => {
     setFiltered(filteredData);
   }, [filteredData]);
+
+  const handleSubmit = () => {
+    fetchSemantic(searchText);
+  };
 
   return (
     <View style={styles.fullScreenContainer}>
@@ -106,7 +152,7 @@ export default function SearchResultsScreen({ route, navigation }: any) {
         searchText={searchText}
         setSearchText={setSearchText}
         onBackPress={() => navigation.goBack()}
-        onSubmit={() => setFiltered(filteredData)}
+        onSubmit={handleSubmit}
       />
 
       <FilterSortBar
@@ -133,7 +179,7 @@ export default function SearchResultsScreen({ route, navigation }: any) {
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
         refreshing={loading}
-        onRefresh={fetchData}
+        onRefresh={() => fetchSemantic(searchText)}
       />
     </View>
   );
