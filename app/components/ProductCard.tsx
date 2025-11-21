@@ -1,4 +1,4 @@
-// File: components/ProductCard.tsx
+// components/ProductCard.tsx
 import React from "react";
 import {
   View,
@@ -9,13 +9,15 @@ import {
   Dimensions,
 } from "react-native";
 import colors from "../config/color";
-import type { Product } from "../data/products";
+import type { Item } from "../types/Item";
+import { getLocationLabel } from "../utils/locationLabel";
 
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = (width - 36) / 2;
 
 interface ProductCardProps {
-  item: Product;
+  item: Item;
+  onPress?: () => void;
 }
 
 const finalColors = {
@@ -23,24 +25,22 @@ const finalColors = {
   text: colors.text || "#FFFFFF",
   textSecondary: colors.textSecondary || "#BDBDBD",
   surface: colors.surface || "#1F1F1F",
-  primary: colors.primary || "#FF6B00", // Màu giảm giá (Discount)
-  accent: colors.accent || "#007AFF", // Màu giá tiền hiện tại
+  primary: colors.primary || "#FF6B00",
+  accent: colors.accent || "#007AFF",
 };
 
-const ProductCard: React.FC<ProductCardProps> = ({ item }) => {
-  return (
-    <TouchableOpacity style={styles.card}>
-      <View style={styles.imageContainer}>
-        <Image
-          source={{ uri: item.image }}
-          style={styles.image}
-          resizeMode="cover"
-        />
+const ProductCard: React.FC<ProductCardProps> = ({ item, onPress }) => {
+  const locationLabel = getLocationLabel(item.location);
+  const imageUri = item.images?.[0];
 
-        {/* Nhãn Discount (Góc dưới bên trái) */}
-        {item.discount && (
-          <View style={styles.discountBadge}>
-            <Text style={styles.discountText}>{item.discount}</Text>
+  return (
+    <TouchableOpacity style={styles.card} onPress={onPress}>
+      <View style={styles.imageContainer}>
+        {imageUri ? (
+          <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
+        ) : (
+          <View style={[styles.image, styles.imagePlaceholder]}>
+            <Text style={styles.placeholderText}>No Image</Text>
           </View>
         )}
       </View>
@@ -50,12 +50,11 @@ const ProductCard: React.FC<ProductCardProps> = ({ item }) => {
       </Text>
 
       <View style={styles.priceRow}>
-        <Text style={styles.price}>{item.price}</Text>
-        {/* Giá gốc (Gạch ngang) */}
-        {item.originalPrice && (
-          <Text style={styles.originalPrice}>{item.originalPrice}</Text>
-        )}
+        <Text style={styles.price}>{item.price.toLocaleString()} đ</Text>
       </View>
+      <Text style={styles.location} numberOfLines={1}>
+        {locationLabel}
+      </Text>
     </TouchableOpacity>
   );
 };
@@ -64,8 +63,8 @@ const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
     backgroundColor: finalColors.surface,
-    borderRadius: 8,
-    padding: 8, // Tăng nhẹ padding cho khớp style ProductList
+    borderRadius: 10,
+    padding: 8,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOpacity: 0.1,
@@ -76,29 +75,17 @@ const styles = StyleSheet.create({
   imageContainer: {
     width: "100%",
     height: 150,
-    borderRadius: 6,
+    borderRadius: 8,
     overflow: "hidden",
     position: "relative",
+    backgroundColor: finalColors.background,
   },
   image: { width: "100%", height: "100%" },
-
-  // Nhãn giảm giá (Vị trí góc dưới bên trái của ảnh)
-  discountBadge: {
-    position: "absolute",
-    left: 0,
-    bottom: 0,
-    backgroundColor: finalColors.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderTopRightRadius: 8,
-    zIndex: 10,
+  imagePlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
   },
-  discountText: {
-    color: finalColors.surface, // Chữ trắng/surface
-    fontSize: 12,
-    fontWeight: "700",
-  },
-
+  placeholderText: { color: finalColors.textSecondary, fontSize: 12 },
   title: {
     color: finalColors.text,
     fontSize: 13,
@@ -110,7 +97,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginTop: 4,
-    justifyContent: "flex-start",
   },
   price: {
     color: finalColors.accent,
@@ -118,10 +104,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginRight: 8,
   },
-  originalPrice: {
+  location: {
     color: finalColors.textSecondary,
     fontSize: 12,
-    textDecorationLine: "line-through",
+    marginTop: 2,
   },
 });
 

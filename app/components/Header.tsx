@@ -10,9 +10,6 @@ const Header: React.FC = () => {
         <TouchableOpacity style={styles.iconButton}>
           <Text style={styles.icon}>🔔</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.iconButton}>
-          <Text style={styles.icon}>🛒</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );

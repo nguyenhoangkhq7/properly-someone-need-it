@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,10 +7,11 @@ import {
   TouchableOpacity,
   Dimensions,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native"; // 👈 thêm dòng này
+import { useNavigation } from "@react-navigation/native";
 import colors from "../config/color";
-import { categories, Category } from "../data/categories";
 import Screen from "../components/Screen";
+import { productApi } from "../api/productApi";
+import type { Item } from "../types/Item";
 
 const { width } = Dimensions.get("window");
 const numColumns = 3;
@@ -20,16 +21,62 @@ const itemGap = 16;
 const itemSize =
   (width - listPadding * 2 - itemGap * (numColumns - 1)) / numColumns;
 
-export default function CategoryScreen() {
-  const navigation = useNavigation<any>(); // 👈 khởi tạo navigation
+const categoryLabel: Record<Item["category"], string> = {
+  PHONE: "Điện thoại",
+  LAPTOP: "Laptop",
+  TABLET: "Tablet",
+  WATCH: "Đồng hồ",
+  HEADPHONE: "Tai nghe",
+  ACCESSORY: "Phụ kiện",
+  OTHER: "Khác",
+};
 
-  const renderCategoryItem = ({ item }: { item: Category }) => (
+const categoryIcon: Record<Item["category"], string> = {
+  PHONE: "📱",
+  LAPTOP: "💻",
+  TABLET: "📲",
+  WATCH: "⌚",
+  HEADPHONE: "🎧",
+  ACCESSORY: "🔌",
+  OTHER: "📦",
+};
+
+export default function CategoryScreen() {
+  const navigation = useNavigation<any>();
+  const [items, setItems] = useState<Item[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await productApi.getAll();
+        setItems(data);
+      } catch (e) {
+        setItems([]);
+      }
+    })();
+  }, []);
+
+  const categories = useMemo(() => {
+    const set = new Set<Item["category"]>();
+    items.forEach((i) => set.add(i.category));
+    return Array.from(set).map((value) => ({
+      value,
+      label: categoryLabel[value] || value,
+      icon: categoryIcon[value] || "📦",
+    }));
+  }, [items]);
+
+  const renderCategoryItem = ({
+    item,
+  }: {
+    item: { value: Item["category"]; label: string; icon: string };
+  }) => (
     <TouchableOpacity
       style={styles.itemContainer}
       onPress={() => {
         navigation.navigate("HomeStack", {
           screen: "SearchResults",
-          params: { category: item.name },
+          params: { category: item.value },
         });
       }}
     >
@@ -37,23 +84,21 @@ export default function CategoryScreen() {
         <Text style={styles.iconText}>{item.icon}</Text>
       </View>
       <Text style={styles.nameText} numberOfLines={2}>
-        {item.name}
+        {item.label}
       </Text>
     </TouchableOpacity>
   );
 
   return (
     <Screen style={styles.safeArea}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Danh mục</Text>
       </View>
 
-      {/* Danh sách dạng Grid */}
       <FlatList
         data={categories}
         renderItem={renderCategoryItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.value}
         numColumns={numColumns}
         style={styles.list}
         contentContainerStyle={{ paddingHorizontal: listPadding }}

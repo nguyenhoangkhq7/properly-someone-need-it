@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ScrollView, StyleSheet, StatusBar, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -6,14 +6,33 @@ import colors from "../config/color";
 import Header from "../components/Header";
 import SearchBar from "../components/SearchBar";
 import Banner from "../components/Banner";
-import CategoryList from "../components/CategoryList";
 import ProductList from "../components/ProductList";
-import { categories } from "../data/categories";
-import { featuredProducts, trendingProducts } from "../data/products";
+import { productApi } from "../api/productApi";
+import type { Item } from "../types/Item";
 
 const HomeScreen = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const navigation = useNavigation<any>();
+  const [nearbyItems, setNearbyItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await productApi.getAll();
+        setNearbyItems(data.slice(0, 5));
+      } catch (e) {
+        console.warn("error", e);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const data = await productApi.getAll();
+      setItems(data.slice(0, 5));
+    })();
+  }, []);
 
   // ✅ HÀM XỬ LÝ ĐIỀU HƯỚNG TÌM KIẾM
   const handleSearch = () => {
@@ -39,17 +58,27 @@ const HomeScreen = () => {
             onSearchPress={handleSearch} // ✅ TRUYỀN HÀM XỬ LÝ
           />
           <Banner />
-          <CategoryList categories={categories} />
-
           <ProductList
             title="Dành cho bạn"
-            products={featuredProducts}
+            products={items}
             horizontal={true}
+            onSeeAll={() =>
+              navigation.navigate("SearchResults", {
+                query: "",
+                from: "forYou",
+              })
+            }
           />
           <ProductList
-            title="Đang bán chạy"
-            products={trendingProducts}
+            title="Gần bạn"
+            products={nearbyItems}
             horizontal={true}
+            onSeeAll={() =>
+              navigation.navigate("SearchResults", {
+                query: "",
+                from: "nearYou",
+              })
+            }
           />
         </View>
       </ScrollView>

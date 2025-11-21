@@ -1,70 +1,104 @@
-// File: screens/SearchResultsScreen.tsx
-import React, { useState, useEffect } from "react";
-import { View, FlatList, StyleSheet, Dimensions } from "react-native";
-// ✅ IMPORT DỮ LIỆU TỪ ĐƯỜNG DẪN CỦA BẠN
-import { featuredProducts, Product } from "../data/products";
-
-// Import các component
+// screens/SearchResultScreen.tsx
+import React, { useEffect, useMemo, useState } from "react";
+import { View, FlatList, StyleSheet } from "react-native";
 import SearchHeader from "../components/SearchHeader";
 import FilterSortBar from "../components/FilterSortBar";
 import ProductCard from "../components/ProductCard";
 import colors from "../config/color";
-
-const { width } = Dimensions.get("window");
+import { productApi } from "../api/productApi";
+import type { Item } from "../types/Item";
 
 const finalColors = {
   ...colors,
   background: colors.background || "#0A0A0A",
 };
 
-// Hàm chuyển đổi giá trị string sang số để sắp xếp
-const parsePrice = (priceString: string): number => {
-  // Chuyển "X.XXX.XXX ₫" thành số (ví dụ: "15.000.000 ₫" -> 15000000)
-  return parseInt(priceString.replace(/\./g, "").replace(" ₫", ""));
-};
-
 export default function SearchResultsScreen({ route, navigation }: any) {
-  const { query, category } = route.params || {}; // 👈 thêm category
+  const { query, category } = route.params || {};
 
-  // Nếu có query thì dùng query, còn không thì dùng category
-  const initialSearch = query || category || "";
+  const [searchText, setSearchText] = useState<string>(query || "");
+  const [items, setItems] = useState<Item[]>([]);
+  const [filtered, setFiltered] = useState<Item[]>([]);
+  const [activeFilter, setActiveFilter] = useState<string>("all"); // all | zeroPrice
+  const [sortType, setSortType] = useState<string>("default"); // default | priceAsc | priceDesc | newest
+  const [loading, setLoading] = useState(false);
+  const [nearMe, setNearMe] = useState(false);
 
-  const [searchText, setSearchText] = useState(initialSearch);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>(
-    featuredProducts as Product[]
-  );
-  const [activeFilter, setActiveFilter] = useState<string>("all");
-  const [sortType, setSortType] = useState<string>("default");
+  const userLocation = { lat: 21.0285, lng: 105.8542 }; // placeholder: Hà Nội centro
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const data = await productApi.getAll();
+      setItems(data);
+    } catch (e) {
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let data = featuredProducts as Product[];
+    fetchData();
+  }, []);
 
-    // ✅ Lọc theo từ khóa hoặc danh mục
+  const filteredData = useMemo(() => {
+    let data = [...items];
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const distanceKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+      const R = 6371;
+      const dLat = toRad(b.lat - a.lat);
+      const dLon = toRad(b.lng - a.lng);
+      const lat1 = toRad(a.lat);
+      const lat2 = toRad(b.lat);
+      const h =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(h));
+    };
+
     if (searchText) {
-      data = data.filter((p) =>
-        p.title.toLowerCase().includes(searchText.toLowerCase())
+      const kw = searchText.toLowerCase();
+      data = data.filter(
+        (p) =>
+          p.title.toLowerCase().includes(kw) ||
+          p.description.toLowerCase().includes(kw)
       );
     }
 
-    // ✅ Lọc theo bộ lọc
-    if (activeFilter === "freeShip") {
-      // data = data.filter((p) => p.freeShip);
+    if (category) {
+      data = data.filter((p) => p.category === category);
     }
 
-    // ✅ Sắp xếp
-    const sortedData = [...data];
+    if (activeFilter === "zeroPrice") {
+      data = data.filter((p) => p.price === 0);
+    }
+
+    if (nearMe) {
+      data = data.filter((p) => {
+        if (!p.location?.coordinates?.length) return false;
+        const [lng, lat] = p.location.coordinates;
+        return distanceKm(userLocation, { lat, lng }) <= 5;
+      });
+    }
+
     if (sortType === "priceAsc") {
-      sortedData.sort((a, b) => parsePrice(a.price) - parsePrice(b.price));
+      data.sort((a, b) => a.price - b.price);
     } else if (sortType === "priceDesc") {
-      sortedData.sort((a, b) => parsePrice(b.price) - parsePrice(a.price));
+      data.sort((a, b) => b.price - a.price);
+    } else if (sortType === "newest") {
+      data.sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
     }
 
-    setFilteredProducts(sortedData);
-  }, [searchText, activeFilter, sortType]);
+    return data;
+  }, [items, searchText, category, activeFilter, sortType]);
 
-  const renderItem = ({ item }: { item: Product }) => (
-    <ProductCard item={item} />
-  );
+  useEffect(() => {
+    setFiltered(filteredData);
+  }, [filteredData]);
 
   return (
     <View style={styles.fullScreenContainer}>
@@ -72,24 +106,34 @@ export default function SearchResultsScreen({ route, navigation }: any) {
         searchText={searchText}
         setSearchText={setSearchText}
         onBackPress={() => navigation.goBack()}
+        onSubmit={() => setFiltered(filteredData)}
       />
 
       <FilterSortBar
-        totalResults={filteredProducts.length}
+        totalResults={filtered.length}
         activeFilter={activeFilter}
         setActiveFilter={setActiveFilter}
         sortType={sortType}
         setSortType={setSortType}
+        nearMe={nearMe}
+        setNearMe={setNearMe}
       />
 
       <FlatList
-        data={filteredProducts}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
+        data={filtered}
+        renderItem={({ item }) => (
+          <ProductCard
+            item={item}
+            onPress={() => navigation.navigate("ProductDetail", { product: item })}
+          />
+        )}
+        keyExtractor={(item) => item._id}
         numColumns={2}
         columnWrapperStyle={styles.columnWrapper}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+        refreshing={loading}
+        onRefresh={fetchData}
       />
     </View>
   );
