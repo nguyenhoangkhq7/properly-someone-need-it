@@ -21,6 +21,7 @@ interface Item {
   price: number;
   images?: string[];
   createdAt?: string;
+  status: "ACTIVE" | "PENDING" | "SOLD" | "DELETED";
 }
 
 export default function MySellingItemsScreen() {
@@ -88,10 +89,7 @@ export default function MySellingItemsScreen() {
       <TouchableOpacity
         activeOpacity={0.8}
         onPress={() =>
-          navigation.navigate("HomeStack", {
-            screen: "ProductDetail",
-            params: { itemId: item._id },
-          })
+          navigation.navigate("MySellingItemDetail", { itemId: item._id })
         }
       >
         <View style={styles.card}>
@@ -112,6 +110,23 @@ export default function MySellingItemsScreen() {
                 {item.title}
               </Text>
               <Text style={styles.price}>{item.price} đ</Text>
+              <Text
+                style={[
+                  styles.status,
+                  item.status === "ACTIVE" && styles.statusActive,
+                  item.status === "PENDING" && styles.statusPending,
+                  item.status === "SOLD" && styles.statusSold,
+                  item.status === "DELETED" && styles.statusDeleted,
+                ]}
+              >
+                {item.status === "ACTIVE"
+                  ? "Đang đăng"
+                  : item.status === "PENDING"
+                  ? "Đang chờ"
+                  : item.status === "SOLD"
+                  ? "Đã bán"
+                  : "Đã xóa"}
+              </Text>
               {item.createdAt && (
                 <Text style={styles.timeText}>
                   {new Date(item.createdAt).toLocaleString("vi-VN")}
@@ -239,6 +254,23 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 11,
     color: colors.textSecondary,
+  },
+  status: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  statusActive: {
+    color: "#2e7d32",
+  },
+  statusPending: {
+    color: "#f9a825",
+  },
+  statusSold: {
+    color: "#1565c0",
+  },
+  statusDeleted: {
+    color: "#9e9e9e",
   },
   errorText: {
     fontSize: 13,

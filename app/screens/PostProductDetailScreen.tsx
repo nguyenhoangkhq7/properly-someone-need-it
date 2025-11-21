@@ -79,16 +79,12 @@ export default function ProductDetailScreen() {
   const [modelName, setModelName] = useState(product?.modelName ?? "");
   const [subcategory, setSubcategory] = useState(product?.subcategory ?? "");
   const [category, setCategory] = useState<string>(product?.category ?? "PHONE");
-  const [isZeroDongProduct, setIsZeroDongProduct] = useState(false); // State cho switch
+  const [isZeroDongProduct, setIsZeroDongProduct] = useState(false); // State cho switch: giá có thể thương lượng
   const [price, setPrice] = useState(product?.price ?? "");
 
   const handleZeroDongSwitch = (newValue: boolean) => {
+    // Bật: giá có thể thương lượng, Tắt: giá cố định
     setIsZeroDongProduct(newValue);
-    if (newValue) {
-      setPrice("0"); // Tự động set giá là 0
-    } else {
-      setPrice(""); // Xóa giá khi tắt (hoặc bạn có thể giữ "0" tùy logic)
-    }
   };
   
   return (
@@ -315,10 +311,10 @@ export default function ProductDetailScreen() {
           </View>
         </View>
 
-        {/* Phần Sản phẩm 0đ */}
+        {/* Phần Giá có thể thương lượng */}
         <View style={[styles.section, styles.rowSection]}>
           <View style={styles.sectionTitleContainer}>
-            <Text style={styles.sectionTitle}>Sản phẩm 0đ</Text>
+            <Text style={styles.sectionTitle}>Giá có thể thương lượng</Text>
             <TouchableOpacity style={{ marginLeft: 4 }}>
               <Ionicons name="help-circle-outline" size={18} color="#888" />
             </TouchableOpacity>
@@ -402,7 +398,8 @@ export default function ProductDetailScreen() {
                 category,
                 price: price ? Number(price) : 0,
                 condition: selectedCondition,
-                isNegotiable: !isZeroDongProduct,
+                // Bật switch = giá có thể thương lượng
+                isNegotiable: isZeroDongProduct,
               },
             })
           }

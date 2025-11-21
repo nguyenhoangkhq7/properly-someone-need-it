@@ -58,14 +58,6 @@ export default function AccountScreen() {
       {/* 2. Stats & Balance */}
       <StatsBalanceSection />
 
-      {/* Nút xem sản phẩm đang bán */}
-      <TouchableOpacity
-        style={styles.sellerOrdersButton}
-        onPress={() => navigation.navigate("MySellingItems")}
-      >
-        <Text style={styles.sellerOrdersText}>Sản phẩm đang bán</Text>
-      </TouchableOpacity>
-
       {/* Nút chuyển sang trang Đơn bán hàng */}
       <TouchableOpacity
         style={styles.sellerOrdersButton}
@@ -80,6 +72,14 @@ export default function AccountScreen() {
         onPress={() => navigation.navigate("BuyerOrders")}
       >
         <Text style={styles.sellerOrdersText}>Đơn mua hàng</Text>
+      </TouchableOpacity>
+
+      {/* Nút hiển thị danh sách sản phẩm đang bán */}
+      <TouchableOpacity
+        style={styles.sellerOrdersButton}
+        onPress={() => navigation.navigate("MySellingItems")}
+      >
+        <Text style={styles.sellerOrdersText}>Sản phẩm đang bán</Text>
       </TouchableOpacity>
 
       {/* 4. Option Lists */}
