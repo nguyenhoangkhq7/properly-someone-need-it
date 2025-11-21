@@ -1,7 +1,7 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import CategoryScreen from "../screens/CategoryScreen";
-import AccountScreen from "../screens/AccountScreen";
+import AccountNavigator from "./AccountNavigator";
 import BottomNav from "./BottomNav";
 import HomeNavigator from "./HomeNavigator";
 import ChatNavigator from "./ChatNavigator";
@@ -18,7 +18,7 @@ export default function AppNavigator() {
       <Tab.Screen name="HomeStack" component={HomeNavigator} />
       <Tab.Screen name="Category" component={CategoryScreen} />
       <Tab.Screen name="Chat" component={ChatNavigator} />
-      <Tab.Screen name="Account" component={AccountScreen} />
+      <Tab.Screen name="Account" component={AccountNavigator} />
       <Tab.Screen name="Center" component={CameraNavigator}  options={{tabBarStyle: { display: "none" }}}/>
     </Tab.Navigator>
   );

@@ -4,8 +4,16 @@ import React, { createContext, useState, useContext, ReactNode, useEffect } from
 import  colors  from '../config/color'; // Đường dẫn tới file màu của bạn
 import { View, ActivityIndicator } from 'react-native';
 
+interface User {
+  _id: string;
+  fullName: string;
+  role: 'seller' | 'buyer';
+  email?: string;
+}
+
 interface AuthContextType {
   userToken: string | null;
+  user: User | null;
   login: (token: string) => void;
   logout: () => void;
   isLoading: boolean;
@@ -15,19 +23,29 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [userToken, setUserToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true); // Bắt đầu ở trạng thái loading
 
   useEffect(() => {
     // Hàm này sẽ kiểm tra xem token đã được lưu từ lần trước chưa
     const bootstrapAsync = async () => {
-      let token = null;
       try {
+        // Sau này có thể đọc token + user thật từ AsyncStorage / API
+        const fakeSeller: User = {
+          // _id: '691fcabea11a95c67d2e526a',
+          // fullName: 'Fake Seller',
+          // role: 'seller',
+          _id: '691fcad4a11a95c67d2e526c',
+          fullName: 'Buyer Demo',
+          role: 'seller',
+        };
+
+        setUser(fakeSeller);
         // token = await AsyncStorage.getItem('userToken'); // Bỏ comment khi bạn sẵn sàng lưu
+        setUserToken('fake-token');
       } catch (e) {
         console.error("Failed to fetch token", e);
       }
-      
-      setUserToken(token); 
       setIsLoading(false); // Hết loading
     };
 
@@ -63,7 +81,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Khi hết loading, cung cấp context cho các component con
   return (
-    <AuthContext.Provider value={{ userToken, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ userToken, user, login, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

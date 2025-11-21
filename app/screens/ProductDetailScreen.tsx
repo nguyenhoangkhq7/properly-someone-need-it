@@ -49,14 +49,48 @@ const OtherProductCard = ({
 
 export default function ProductDetailScreen() {
   // const navigation =useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
-  const navigation= useNavigation<any>();
+  const navigation = useNavigation<any>();
   const route = useRoute<ProductDetailScreenRouteProp>();
   const { product } = route.params; // Nhận product từ ProductList
 
   const [quantity, setQuantity] = useState(1);
+  const [isBuying, setIsBuying] = useState(false);
 
   const handleQuantityChange = (amount: number) => {
     setQuantity((prev) => Math.max(1, prev + amount));
+  };
+
+  // Hàm chọn mua ngay
+  const handleBuyNow = async () => {
+    try {
+      setIsBuying(true);
+
+      // Tạm thời dùng cứng một _id item thật trong Mongo để test mua hàng
+      const itemId = "691fcded133fbc6269a037dd";
+
+      const res = await fetch("http://192.168.1.10:3000/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ itemId }),
+      });
+      const data = await res.json();
+      console.log("Create order response", res.status, data);
+
+      if (!res.ok) {
+        return;
+      }
+
+      const order = data.order;
+      navigation.navigate("OrderDetail", {
+        orderId: order._id,
+      });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsBuying(false);
+    }
   };
 
   return (
@@ -217,7 +251,11 @@ export default function ProductDetailScreen() {
           <Icon name="add-circle-outline" size={22} color={colors.primary} />
           <Text style={styles.footerButtonTextSecondary}>YÊU THÍCH</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.footerButtonPrimary}>
+        <TouchableOpacity
+          style={styles.footerButtonPrimary}
+          onPress={handleBuyNow}
+          disabled={isBuying}
+        >
           <Text style={styles.footerButtonTextPrimary}>MUA NGAY</Text>
         </TouchableOpacity>
       </View>

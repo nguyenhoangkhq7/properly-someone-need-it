@@ -1,4 +1,4 @@
-  import React, { useState } from "react";
+  import React, { useEffect, useRef, useState } from "react";
   import {
     StyleSheet,
     View,
@@ -7,21 +7,21 @@
     Modal,
     SafeAreaView,
     StatusBar,
-    ImageBackground,
     ScrollView,
+    ImageBackground,
   } from "react-native";
+  import { CameraView, FlashMode, useCameraPermissions } from "expo-camera";
   import Icon from "react-native-vector-icons/Ionicons";
   import FeatherIcon from "react-native-vector-icons/Feather";
   import MaterialIcon from "react-native-vector-icons/MaterialIcons";
-  import { useNavigation } from "@react-navigation/native";
+  import { useNavigation, useRoute } from "@react-navigation/native";
   import colors from "../config/color";
 import { Product } from "../data/products";
+import { CameraStackParamList } from "../navigator/CameraNavigator";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+// @ts-ignore - installed via Expo
+import * as ImagePicker from "expo-image-picker";
 
-  // Hình ảnh placeholder cho nền camera.
-  // Trong một ứng dụng thật, đây sẽ là component <CameraView>.
-  const CAMERA_PLACEHOLDER_IMAGE = {
-    uri: 'https://placehold.co/400x600/222/FFF?text=Camera+View', // Đổi tỷ lệ một chút
-  };
 
   // Component Checkbox tùy chỉnh vì CheckBox không phải là component cốt lõi
   const CustomCheckbox = ({
@@ -64,51 +64,133 @@ import { Product } from "../data/products";
     <View
       style={[
         styles.previewItem,
-        active && styles.previewItemActive,
+        active && styles.previewItem,
       ]}
     />
   );
 
 
   export default function PostProductScreen() {
-    const [modalVisible, setModalVisible] = useState(true);
+    const [permission, requestPermission] = useCameraPermissions();
+    const cameraRef = useRef<CameraView | null>(null);
+    const [facing, setFacing] = useState<"front" | "back">("back");
+    const [flash, setFlash] = useState<FlashMode>("off");
+    const [modalVisible, setModalVisible] = useState(false);
     const [dontShowAgain, setDontShowAgain] = useState(false);
     const navigation = useNavigation<any>();
+    const route = useRoute<any>();
+    const routeProduct: Product | undefined = route.params?.product;
 
     const [product, setProduct]= useState<Product>({
-        id: "",
-        title: "",
-        price: "",
-        originalPrice: "",
-        discount: "",
-        image: "", //thay ảnh camera khi thực hiện thục tế
-        category: "",
+        id: routeProduct?.id ?? "",
+        title: routeProduct?.title ?? "",
+        price: routeProduct?.price ?? "",
+        originalPrice: routeProduct?.originalPrice ?? "",
+        discount: routeProduct?.discount ?? "",
+        image: routeProduct?.image ?? "", // giữ cho data cũ, không dùng trong luồng mới
+        images: routeProduct?.images ?? [],
+        category: routeProduct?.category ?? "",
       });
 
-        // Hàm xử lý khi nhấn nút chụp ảnh (giả lập)
-    const handleCamera = (imgUrl:string) => {
-      console.log("Chụp ảnh (giả lập)"); 
-      setProduct({
-        ...product, image: imgUrl, //new image url
-      })
-    }
+    useEffect(() => {
+      const checkTipPreference = async () => {
+        try {
+          const stored = await AsyncStorage.getItem("camera_tip_hidden");
+          if (stored === "true") {
+            setDontShowAgain(true);
+            setModalVisible(false);
+          } else {
+            setModalVisible(true);
+          }
+        } catch (e) {
+          setModalVisible(true);
+        }
+      };
+      checkTipPreference();
+    }, []);
+
+    const handleRequestPermission = async () => {
+      if (!permission || !permission.granted) {
+        await requestPermission();
+      }
+    };
+
+    const handleCamera = async () => {
+      try {
+        if (!permission || !permission.granted) {
+          const result = await requestPermission();
+          if (!result.granted) return;
+        }
+
+        if (!cameraRef.current) return;
+
+        const photo = await cameraRef.current.takePictureAsync();
+        if (!photo?.uri) return;
+
+        setProduct((prev) => ({
+          ...prev,
+          images: [...(prev.images || []), photo.uri],
+        }));
+      } catch (error) {
+        console.log("Lỗi chụp ảnh:", error);
+      }
+    };
+
+    const toggleFacing = () => {
+      setFacing((prev) => (prev === "back" ? "front" : "back"));
+    };
+
+    const toggleFlash = () => {
+      setFlash((prev) => (prev === "off" ? "on" : "off"));
+    };
+
+    const handlePickFromLibrary = async () => {
+      try {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
+          return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsMultipleSelection: true,
+          quality: 1,
+        });
+
+        if (result.canceled) return;
+
+        const uris = "assets" in result
+          ? result.assets.map((a: { uri: string }) => a.uri).filter(Boolean)
+          : [];
+
+        if (!uris.length) return;
+
+        setProduct((prev) => ({
+          ...prev,
+          images: [...(prev.images || []), ...uris],
+        }));
+      } catch (error) {
+        console.log("Lỗi chọn ảnh thư viện:", error);
+      }
+    };
 
     return (
       <View style={styles.screen}>
         <StatusBar barStyle="light-content" />
         <SafeAreaView style={styles.safeArea}>
-          {/* Nền Camera (Giả lập) */}
-          <ImageBackground
-            source={CAMERA_PLACEHOLDER_IMAGE}
-            style={styles.cameraView} // Đổi tên từ cameraBackground
-            resizeMode="cover"
+          {/* Camera thật */}
+          <CameraView
+            ref={cameraRef}
+            style={styles.cameraView}
+            facing={facing}
+            flash={flash}
           >
             {/* Header */}
             <View style={styles.header}>
               <TouchableOpacity onPress={() => navigation.goBack()}>
                 <Icon name="close" size={30} color="white" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.libraryButton}>
+              <TouchableOpacity style={styles.libraryButton} onPress={handlePickFromLibrary}>
                 <Text style={styles.libraryButtonText}>Thư viện</Text>
               </TouchableOpacity>
             </View>
@@ -123,9 +205,7 @@ import { Product } from "../data/products";
               </View>
             </View>
 
-            {/* Footer (Giả lập) - ĐÃ XÓA khỏi đây */}
-
-          </ImageBackground>
+          </CameraView>
 
           {/* Khu vực điều khiển (Control Area) - MỚI */}
           <View style={styles.controlsContainer}>
@@ -135,33 +215,44 @@ import { Product } from "../data/products";
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.previewCarousel}
             >
-              <PreviewItem active={true} />
-              <PreviewItem />
-              <PreviewItem />
-              <PreviewItem />
-              <PreviewItem />
-              <PreviewItem />
+              {(product.images || []).map((uri, index) => (
+                <ImageBackground
+                  key={uri + index}
+                  source={{ uri }}
+                  style={styles.previewItem}
+                  imageStyle={{ borderRadius: 8 }}
+                >
+                  {index === (product.images || []).length - 1 && (
+                    <View style={styles.previewItemActiveOverlay} />
+                  )}
+                </ImageBackground>
+              ))}
             </ScrollView>
 
             {/* Hàng nút điều khiển chính */}
             <View style={styles.mainControls}>
-              <TouchableOpacity style={styles.controlButton}>
-                <Icon name="flash-off-outline" size={28} color="white" />
+              <TouchableOpacity style={styles.controlButton} onPress={toggleFlash}>
+                <Icon
+                  name={flash === "off" ? "flash-off-outline" : "flash-outline"}
+                  size={28}
+                  color="white"
+                />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.captureButton} onPress={() => handleCamera('https://images.dubizzle.com.eg/thumbnails/129930685-800x600.jpeg')}>
+              <TouchableOpacity style={styles.captureButton} onPress={handleCamera}>
                 <Icon name="camera-outline" size={36} color="#333" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.controlButton}>
+              <TouchableOpacity style={styles.controlButton} onPress={toggleFacing}>
                 <Icon name="camera-reverse-outline" size={32} color="white" />
               </TouchableOpacity>
             </View>
 
             {/* Hàng nút dưới cùng */}
             <View style={styles.bottomBar}>
-              <TouchableOpacity style={styles.controlButton}>
-                <Icon name="videocam-outline" size={32} color="white" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.doneButton} onPress={() => navigation.navigate("PostProductDetail")}>
+              <View style={{ flex: 1 }} />
+              <TouchableOpacity
+                style={styles.doneButton}
+                onPress={() => navigation.navigate("PostProductDetail", { product })}
+              >
                 <Text style={styles.doneButtonText}>Xong</Text>
               </TouchableOpacity>
             </View>
@@ -209,7 +300,12 @@ import { Product } from "../data/products";
               <CustomCheckbox
                 label="Không hiển thị lại"
                 value={dontShowAgain}
-                onValueChange={setDontShowAgain}
+                onValueChange={async (val) => {
+                  setDontShowAgain(val);
+                  try {
+                    await AsyncStorage.setItem("camera_tip_hidden", val ? "true" : "false");
+                  } catch (e) {}
+                }}
               />
             </View>
           </View>
@@ -320,9 +416,15 @@ import { Product } from "../data/products";
       backgroundColor: '#333',
       marginHorizontal: 4,
     },
-    previewItemActive: {
+    previewItemActiveOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
       borderColor: 'white',
       borderWidth: 2,
+      borderRadius: 8,
     },
 
     // Hàng nút điều khiển chính - CẬP NHẬT (trước là 'footer')
