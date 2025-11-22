@@ -1,10 +1,12 @@
-import axios, {
-  AxiosError,
-  AxiosInstance,
-  AxiosRequestConfig,
-  AxiosResponse,
-} from "axios";
-import { tokenStorage, StoredTokens } from "../utils/storage";
+import axios,
+  {
+    AxiosError,
+    AxiosInstance,
+    AxiosRequestConfig,
+    AxiosRequestHeaders,
+    AxiosResponse,
+  } from "axios";
+import { tokenStorage, type StoredTokens } from "../utils/storage";
 import { getApiBaseUrl } from "../config/api";
 
 export interface ApiResponse<T> {
@@ -107,11 +109,18 @@ const queueRefresh = (): Promise<string | null> => {
   return refreshPromise;
 };
 
+const ensureHeaders = (config: AxiosRequestConfig): AxiosRequestHeaders => {
+  if (!config.headers) {
+    config.headers = {} as AxiosRequestHeaders;
+  }
+  return config.headers as AxiosRequestHeaders;
+};
+
 api.interceptors.request.use(async (config) => {
   await ensureTokensHydrated();
   if (inMemoryTokens.accessToken) {
-    config.headers = config.headers ?? {};
-    config.headers.Authorization = `Bearer ${inMemoryTokens.accessToken}`;
+    const headers = ensureHeaders(config);
+    headers.Authorization = `Bearer ${inMemoryTokens.accessToken}`;
   }
   return config;
 });
@@ -127,8 +136,8 @@ api.interceptors.response.use(
       try {
         const newAccessToken = await queueRefresh();
         if (newAccessToken) {
-          originalRequest.headers = originalRequest.headers ?? {};
-          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+          const headers = ensureHeaders(originalRequest);
+          headers.Authorization = `Bearer ${newAccessToken}`;
           return api(originalRequest);
         }
       } catch (refreshError) {

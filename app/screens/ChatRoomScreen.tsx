@@ -1,4 +1,11 @@
-import React, { useState, useRef, useEffect,useLayoutEffect  } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import {
   View,
   Text,
@@ -10,17 +17,15 @@ import {
   Platform,
   SafeAreaView,
   Image,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons, Feather } from "@expo/vector-icons"; // Thêm Feather cho icon gọi/gửi file
 import colors from "../config/color";
 import { useNavigation } from "@react-navigation/native";
-
-interface Message {
-    id: string;
-    text: string;
-    sender: "me" | "other";
-    time: string;
-}
+import { chatApi, type ChatMessage, type TypingLogEntry, type TypingCurrentEntry, type ChatRoomSummary } from "../api/chatApi";
+import { getChatSocket } from "../utils/chatSocket";
+import { useAuth } from "../context/AuthContext";
 
 // Giả định màu sắc
 const finalColors = {
@@ -34,14 +39,32 @@ const finalColors = {
     border: colors.border || "#232621",
 };
 
+const TYPING_DEBOUNCE_MS = 500;
+const FALLBACK_AVATAR = "https://placehold.co/100x100/1F1F1F/F6FF00?text=U";
+
 export default function ChatRoomScreen({ route, navigation }: any) {
-  const { chat } = route.params;
-  const [messages, setMessages] = useState<Message[]>([
-    { id: "1", text: "Xin chào 👋!", sender: "other", time: "09:00" },
-    { id: "2", text: "Mình muốn hỏi về sản phẩm mới.", sender: "me", time: "09:01" },
-  ]);
+  const { room }: { room: ChatRoomSummary } = route.params;
+  const roomId = room?.roomId;
+  const { accessToken, user } = useAuth();
+  const chatSocket = useMemo(() => getChatSocket(accessToken ?? null), [accessToken]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(true);
+  const [typingHistory, setTypingHistory] = useState<TypingLogEntry[]>([]);
+  const [currentTyping, setCurrentTyping] = useState<TypingCurrentEntry[]>([]);
   const [inputText, setInputText] = useState("");
-  const flatListRef = useRef<FlatList<Message>>(null);
+  const flatListRef = useRef<FlatList<ChatMessage>>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isTypingRef = useRef(false);
+
+  if (!room || !roomId) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.messageLoading}>
+          <Text style={styles.emptyFallback}>Không tìm thấy phòng chat.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   useLayoutEffect(() => {
     // Ẩn bottom tab bar khi vào chat room
@@ -53,46 +76,234 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     };
   }, [navigation]);
 
-  const sendMessage = () => {
-    if (inputText.trim() === "") return;
-    const newMsg: Message = {
-      id: Date.now().toString(),
-      text: inputText,
-      sender: "me",
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    };
-    setMessages((prev) => [...prev, newMsg]);
-    setInputText("");
-  };
+  const scrollToBottom = useCallback(() => {
+    flatListRef.current?.scrollToEnd({ animated: true });
+  }, []);
 
-  const handleCall = (type: 'audio' | 'video') => {
-      alert(`Đang gọi ${type === 'video' ? 'video' : 'thoại'} tới ${chat.name}...`);
-  };
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages.length, scrollToBottom]);
+
+  const appendMessage = useCallback((message: ChatMessage) => {
+    setMessages((prev) => {
+      const exists = prev.some((item) => item.id === message.id);
+      if (exists) {
+        return prev.map((item) => (item.id === message.id ? message : item));
+      }
+      return [...prev, message];
+    });
+  }, []);
+
+  const loadMessages = useCallback(async () => {
+    if (!roomId) return;
+    setIsLoadingMessages(true);
+    try {
+      const data = await chatApi.getMessages(roomId);
+      setMessages(data);
+    } catch (error) {
+      console.error("Failed to load messages", error);
+    } finally {
+      setIsLoadingMessages(false);
+    }
+  }, [roomId]);
+
+  const loadTypingLogs = useCallback(async () => {
+    if (!roomId) return;
+    try {
+      const snapshot = await chatApi.getTypingLogs(roomId);
+      setTypingHistory(snapshot.history);
+      setCurrentTyping(snapshot.current);
+    } catch (error) {
+      console.error("Failed to load typing logs", error);
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    void loadMessages();
+    void loadTypingLogs();
+  }, [loadMessages, loadTypingLogs]);
+
+  const markAsRead = useCallback(async () => {
+    if (!roomId) return;
+    try {
+      await chatApi.markAsRead(roomId);
+      chatSocket?.emit("message:read", { roomId });
+    } catch (error) {
+      console.error("Failed to mark messages as read", error);
+    }
+  }, [chatSocket, roomId]);
+
+  useEffect(() => {
+    void markAsRead();
+  }, [markAsRead]);
+
+    const handleCall = (type: 'audio' | 'video') => {
+      alert(`Đang gọi ${type === 'video' ? 'video' : 'thoại'} tới ${room?.peer?.name ?? 'người dùng'}...`);
+    };
 
   const handleAttachFile = () => {
       alert("Mở hộp thoại chọn File/Ảnh...");
   };
 
-  useEffect(() => {
-    // Cuộn xuống cuối sau khi tin nhắn được cập nhật
-    flatListRef.current?.scrollToEnd({ animated: true });
-  }, [messages]);
+  const handleSocketEvents = useCallback(() => {
+    if (!chatSocket || !roomId) return () => {};
 
-  const renderMessage = ({ item }: { item: Message }) => (
-    <View
-        style={[
-            styles.messageContainer,
-            item.sender === "me" ? styles.myMessage : styles.otherMessage,
-        ]}
-    >
-        <Text style={[styles.messageText, item.sender === "me" && styles.myMessageText]}>
-            {item.text}
-        </Text>
-        <Text style={[styles.timeText, item.sender === "me" && styles.myTimeText]}>
-            {item.time}
-        </Text>
-    </View>
+    chatSocket.emit("room:join", { roomId });
+
+    const handleNewMessage = (message: ChatMessage) => {
+      if (message.roomId !== roomId) return;
+      appendMessage(message);
+      if (message.senderId !== user?.id) {
+        void markAsRead();
+      }
+    };
+
+    const handleTypingUpdate = (payload: {
+      roomId: string;
+      userId: string;
+      isTyping: boolean;
+      history?: TypingLogEntry[];
+      current?: TypingCurrentEntry[];
+    }) => {
+      if (payload.roomId !== roomId) return;
+      if (payload.history) {
+        setTypingHistory(payload.history);
+      }
+      if (payload.current) {
+        setCurrentTyping(payload.current);
+      }
+    };
+
+    const handleTypingCleared = ({ roomId: clearedId }: { roomId: string }) => {
+      if (clearedId !== roomId) return;
+      setTypingHistory([]);
+      setCurrentTyping([]);
+    };
+
+    chatSocket.on("message:new", handleNewMessage);
+    chatSocket.on("typing:update", handleTypingUpdate);
+    chatSocket.on("typing:cleared", handleTypingCleared);
+
+    return () => {
+      chatSocket.off("message:new", handleNewMessage);
+      chatSocket.off("typing:update", handleTypingUpdate);
+      chatSocket.off("typing:cleared", handleTypingCleared);
+    };
+  }, [appendMessage, chatSocket, markAsRead, roomId, user?.id]);
+
+  useEffect(() => {
+    const cleanup = handleSocketEvents();
+    return cleanup;
+  }, [handleSocketEvents]);
+
+  const resolveUserLabel = useCallback(
+    (userId: string) => {
+      if (user?.id === userId) {
+        return "Bạn";
+      }
+      if (room?.peer?.id === userId) {
+        return room.peer.name;
+      }
+      return "Người dùng";
+    },
+    [room?.peer?.id, room?.peer?.name, user?.id]
   );
+
+  const handleClearTypingLogs = useCallback(async () => {
+    if (!roomId) return;
+    try {
+      await chatApi.clearTypingLogs(roomId);
+      setTypingHistory([]);
+      setCurrentTyping([]);
+      chatSocket?.emit("typing:clear", { roomId });
+    } catch (error) {
+      console.error("Failed to clear typing logs", error);
+      Alert.alert("Không thể xoá", "Vui lòng thử lại sau.");
+    }
+  }, [chatSocket, roomId]);
+
+  const sendMessage = useCallback(() => {
+    if (!roomId) return;
+    const content = inputText.trim();
+    if (!content) return;
+    setInputText("");
+
+    const onError = (message?: string) => {
+      Alert.alert("Không gửi được", message ?? "Vui lòng thử lại.");
+      setInputText(content);
+    };
+
+    if (chatSocket) {
+      chatSocket.emit(
+        "message:send",
+        { roomId, content },
+        (response?: { success: boolean; data?: ChatMessage; error?: string }) => {
+          if (!response?.success) {
+            onError(response?.error);
+            return;
+          }
+          if (!response?.data) {
+            return;
+          }
+          appendMessage(response.data);
+        }
+      );
+      return;
+    }
+
+    chatApi
+      .sendMessage(roomId, content)
+      .then((message) => appendMessage(message))
+      .catch((error) => {
+        console.error("Failed to send message", error);
+        onError();
+      });
+  }, [appendMessage, chatSocket, inputText, roomId]);
+
+  const emitTypingState = useCallback(
+    (isTyping: boolean) => {
+      if (!roomId || !chatSocket) return;
+      chatSocket.emit("typing:update", { roomId, isTyping });
+    },
+    [chatSocket, roomId]
+  );
+
+  const handleTypingChange = useCallback(
+    (text: string) => {
+      setInputText(text);
+      if (!roomId) return;
+
+      const trimmed = text.trim();
+      if (trimmed.length > 0 && !isTypingRef.current) {
+        isTypingRef.current = true;
+        emitTypingState(true);
+      }
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      typingTimeoutRef.current = setTimeout(() => {
+        if (isTypingRef.current) {
+          emitTypingState(false);
+          isTypingRef.current = false;
+        }
+      }, TYPING_DEBOUNCE_MS);
+    },
+    [emitTypingState, roomId]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      if (isTypingRef.current) {
+        emitTypingState(false);
+        isTypingRef.current = false;
+      }
+    };
+  }, [emitTypingState]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -103,9 +314,9 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           <Ionicons name="arrow-back" size={24} color={finalColors.text} />
         </TouchableOpacity>
         
-        <Image source={{ uri: chat.avatar }} style={styles.avatar} />
+        <Image source={{ uri: room?.peer?.avatar ?? FALLBACK_AVATAR }} style={styles.avatar} />
         
-        <Text style={styles.headerTitle} numberOfLines={1}>{chat.name}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{room?.peer?.name}</Text>
         
         <View style={styles.headerActions}>
             {/* Nút Gọi Video */}
@@ -120,14 +331,66 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       </View>
 
       {/* DANH SÁCH TIN NHẮN */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.messageList}
-        inverted={false} // Hiển thị tin nhắn từ trên xuống
-      />
+      {isLoadingMessages ? (
+        <View style={styles.messageLoading}>
+          <ActivityIndicator color={finalColors.primary} size="large" />
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={({ item }: { item: ChatMessage }) => {
+            const isMine = item.senderId === user?.id;
+            return (
+              <View
+                style={[
+                  styles.messageContainer,
+                  isMine ? styles.myMessage : styles.otherMessage,
+                ]}
+              >
+                <Text style={[styles.messageText, isMine && styles.myMessageText]}>
+                  {item.content}
+                </Text>
+                <Text style={[styles.timeText, isMine && styles.myTimeText]}>
+                  {new Date(item.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </Text>
+              </View>
+            );
+          }}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.messageList}
+        />
+      )}
+
+      <View style={styles.typingWrapper}>
+        {currentTyping.some((entry) => entry.userId === room?.peer?.id) && (
+          <Text style={styles.typingIndicator}>{room?.peer?.name} đang nhập...</Text>
+        )}
+
+        <View style={styles.typingHistoryHeader}>
+          <Text style={styles.typingHistoryTitle}>Lịch sử đang nhập</Text>
+          <TouchableOpacity onPress={() => void handleClearTypingLogs()}>
+            <Text style={styles.clearHistoryButton}>Xóa lịch sử</Text>
+          </TouchableOpacity>
+        </View>
+        {typingHistory.length === 0 ? (
+          <Text style={styles.typingHistoryEmpty}>Chưa có hoạt động nhập.</Text>
+        ) : (
+          typingHistory
+            .slice()
+            .reverse()
+            .map((log, index) => (
+              <Text
+                style={styles.typingHistoryItem}
+                key={`${log.userId}-${log.timestamp}-${index}`}
+              >
+                {new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                {" - "}
+                {resolveUserLabel(log.userId)} {log.action === "START" ? "bắt đầu" : "dừng"} nhập.
+              </Text>
+            ))
+        )}
+      </View>
 
       {/* Ô NHẬP TIN NHẮN */}
       <KeyboardAvoidingView
@@ -146,9 +409,9 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                 placeholder="Nhập tin nhắn..."
                 placeholderTextColor={finalColors.muted}
                 value={inputText}
-                onChangeText={setInputText}
+              onChangeText={handleTypingChange}
                 multiline={false} 
-                onSubmitEditing={sendMessage}
+              onSubmitEditing={sendMessage}
             />
             
             <TouchableOpacity 
@@ -197,7 +460,16 @@ const styles = StyleSheet.create({
     },
 
     // --- MESSAGE LIST ---
-    messageList: { padding: 10 },
+    messageList: { padding: 10, paddingBottom: 100 },
+    messageLoading: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    emptyFallback: {
+      color: finalColors.muted,
+      fontSize: 16,
+    },
     messageContainer: {
         maxWidth: "75%",
         marginVertical: 4, // Giảm margin dọc
@@ -258,5 +530,39 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         padding: 9,
         marginLeft: 4,
+    },
+    typingWrapper: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: finalColors.surface,
+      borderTopWidth: 1,
+      borderTopColor: finalColors.border,
+    },
+    typingIndicator: {
+      color: finalColors.primary,
+      fontWeight: "600",
+      marginBottom: 6,
+    },
+    typingHistoryHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 4,
+    },
+    typingHistoryTitle: {
+      color: finalColors.text,
+      fontWeight: "600",
+    },
+    clearHistoryButton: {
+      color: finalColors.primary,
+      fontWeight: "600",
+    },
+    typingHistoryEmpty: {
+      color: finalColors.muted,
+      fontSize: 13,
+    },
+    typingHistoryItem: {
+      color: finalColors.textSecondary,
+      fontSize: 13,
     },
 });

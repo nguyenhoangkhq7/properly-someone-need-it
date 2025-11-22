@@ -16,3 +16,14 @@ export const getApiBaseUrl = (): string => {
 
   return apiUrl;
 };
+
+export const getSocketBaseUrl = (): string => {
+  const apiUrl = getApiBaseUrl();
+  if (apiUrl.endsWith("/api")) {
+    return apiUrl.slice(0, -4);
+  }
+  if (apiUrl.endsWith("/api/")) {
+    return apiUrl.slice(0, -5);
+  }
+  return apiUrl;
+};

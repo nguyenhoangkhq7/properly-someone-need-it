@@ -14,11 +14,11 @@ export type HomeStackParamList = {
   AllRatingScreen: undefined;
 };
 
-const Stack = createNativeStackNavigator<HomeStackParamList>();
+const Stack = createNativeStackNavigator<HomeStackParamList, "HomeStack">();
 
 export default function HomeNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator id="HomeStack" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="HomeScreen" component={HomeScreen} />
       <Stack.Screen name="ShopScreen" component={ShopScreen} />
       <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />

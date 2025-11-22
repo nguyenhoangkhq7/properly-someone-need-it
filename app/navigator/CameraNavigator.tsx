@@ -8,11 +8,11 @@ export type CameraStackParamList = {
     ShippingDetailScreen: undefined;
 };
 
-const Stack = createNativeStackNavigator<CameraStackParamList>();
+const Stack = createNativeStackNavigator<CameraStackParamList, "CameraStack">();
 
 export default function CameraNavigator() {
     return (
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Navigator id="CameraStack" screenOptions={{ headerShown: false }}>
             <Stack.Screen name="PostProduct" component={PostProductScreen} />
             <Stack.Screen name="PostProductDetail" component={PostProductDetailScreen} />
             <Stack.Screen name="ShippingDetailScreen" component={ShippingDetailScreen} />
