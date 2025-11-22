@@ -87,6 +87,7 @@ const haversineKm = (
 };
 
 export default function ProductDetailScreen() {
+  // const navigation =useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const navigation = useNavigation<any>();
   const route = useRoute<ProductDetailScreenRouteProp>();
   const { product: initialProduct } = route.params;
@@ -275,6 +276,39 @@ export default function ProductDetailScreen() {
       return `${seller.successfulTrades} giao dịch thành công`;
     }
     return "Chưa có giao dịch";
+  };
+
+  // Hàm chọn mua ngay (Phúc Vinh)
+  const handleBuyNow = async () => {
+    try {
+      setIsBuying(true);
+
+      // Tạm thời dùng cứng một _id item thật trong Mongo để test mua hàng
+      const itemId = "691fcded133fbc6269a037dd";
+
+      const res = await fetch("http://192.168.1.10:3000/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ itemId }),
+      });
+      const data = await res.json();
+      console.log("Create order response", res.status, data);
+
+      if (!res.ok) {
+        return;
+      }
+
+      const order = data.order;
+      navigation.navigate("OrderDetail", {
+        orderId: order._id,
+      });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsBuying(false);
+    }
   };
 
   return (
@@ -479,7 +513,22 @@ export default function ProductDetailScreen() {
           />
         </View>
       </ScrollView>
-    </SafeAreaView>
+
+      {/* Footer Buttons */}
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.footerButtonSecondary}>
+          <Icon name="add-circle-outline" size={22} color={colors.primary} />
+          <Text style={styles.footerButtonTextSecondary}>YÊU THÍCH</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.footerButtonPrimary}
+          onPress={handleBuyNow} //Phúc Vinh
+          disabled={isBuying}
+        >
+          <Text style={styles.footerButtonTextPrimary}>MUA NGAY</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 

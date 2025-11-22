@@ -20,7 +20,8 @@ const BottomNav: React.FC<BottomNavProps> = ({ state, navigation }) => {
     "PostProduct",
     "PostProductDetail",
     "ShippingDetailScreen",
-    "Center"
+    "Center",
+    "MapPickerScreen"
   ];
 
   // 🔥 Nếu tên màn nằm trong hiddenRoutes → ẩn tab bar

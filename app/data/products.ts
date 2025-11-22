@@ -6,7 +6,8 @@ export interface Product {
   price: string;
   originalPrice?: string;
   discount?: string;
-  image?: string;
+  image?: string; // legacy field for existing data
+  images?: string[]; // new field for multiple images when posting
   category: string;
 }
 
