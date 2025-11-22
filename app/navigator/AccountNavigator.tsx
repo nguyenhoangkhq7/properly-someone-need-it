@@ -14,11 +14,11 @@ export type AccountStackParamList = {
   MySellingItems: undefined;
 };
 
-const Stack = createStackNavigator<AccountStackParamList>();
+const Stack = createStackNavigator<AccountStackParamList, "AccountStack">();
 
 export default function AccountNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator id="AccountStack" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="AccountMain" component={AccountScreen} />
       <Stack.Screen name="SellerOrders" component={SellerOrdersScreen} />
       <Stack.Screen name="BuyerOrders" component={BuyerOrdersScreen} />

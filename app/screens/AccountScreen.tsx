@@ -1,10 +1,13 @@
 import React, { useCallback } from "react";
-import { Alert, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, View, Text, TouchableOpacity } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { StackNavigationProp } from "@react-navigation/stack";
 import ProfileHeader from "../components/account/ProfileHeader";
 import StatsBalanceSection from "../components/account/StatBalanceSection";
 import MenuOptionList, { type OptionItem } from "../components/account/MenuOptionList";
 import colors from "../config/color";
 import { useAuth } from "../context/AuthContext";
+import type { AccountStackParamList } from "../navigator/AccountNavigator";
 
 const finalColors = {
   ...colors,
@@ -25,6 +28,7 @@ const supportOptions: OptionItem[] = [
 
 export default function AccountScreen() {
   const { user, logout } = useAuth();
+  const navigation = useNavigation<StackNavigationProp<AccountStackParamList>>();
 
   const handleOptionPress = useCallback(
     (item: OptionItem) => {

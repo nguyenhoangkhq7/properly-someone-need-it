@@ -68,6 +68,9 @@ export default function ShopScreen({ route }: Props) {
   const [ratingInput, setRatingInput] = useState(5);
   const [commentInput, setCommentInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sellerItems, setSellerItems] = useState<Item[]>([]);
+  const [loadingSellerItems, setLoadingSellerItems] = useState(false);
+  const [sellerItemsError, setSellerItemsError] = useState<string | null>(null);
 
   const averageRatingLabel = useMemo(() => {
     return stats.averageRating ? stats.averageRating.toFixed(1) : "0.0";
@@ -97,6 +100,30 @@ export default function ShopScreen({ route }: Props) {
   useEffect(() => {
     loadReviews();
   }, [loadReviews]);
+
+  const loadSellerItems = useCallback(async () => {
+    if (!sellerId) {
+      setSellerItems([]);
+      setSellerItemsError(null);
+      return;
+    }
+
+    setLoadingSellerItems(true);
+    try {
+      const allItems = await productApi.getAll();
+      const filtered = (allItems || []).filter((item) => item.sellerId === sellerId);
+      setSellerItems(filtered);
+      setSellerItemsError(null);
+    } catch (error) {
+      setSellerItemsError("Khong the tai san pham cua nguoi ban nay");
+    } finally {
+      setLoadingSellerItems(false);
+    }
+  }, [sellerId]);
+
+  useEffect(() => {
+    loadSellerItems();
+  }, [loadSellerItems]);
 
   const handleOpenReviewModal = useCallback(() => {
     if (!sellerId) {
@@ -322,17 +349,25 @@ export default function ShopScreen({ route }: Props) {
             </TouchableOpacity>
           </View>
           <View style={styles.productGrid}>
-            <FlatList
-              data={trendingProducts}
-              renderItem={({ item }) => <ProductItem product={item} horizontal />}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingLeft: 12 }}
-            />
+            {loadingSellerItems ? (
+              <ActivityIndicator color={colors.primary} style={{ marginVertical: 12 }} />
+            ) : sellerItemsError ? (
+              <Text style={styles.errorText}>{sellerItemsError}</Text>
+            ) : sellerItems.length === 0 ? (
+              <Text style={styles.emptyText}>Chưa có sản phẩm nào.</Text>
+            ) : (
+              <FlatList
+                data={sellerItems}
+                renderItem={({ item }) => <ProductItem product={item} horizontal />}
+                keyExtractor={(item) => item._id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingLeft: 12 }}
+              />
+            )}
           </View>
           <OutlineButton
-            text="HIỂN THỊ THÊM"
+            text="XEM THEM SAN PHAM"
             onPress={() => navigation.navigate("HomeStack", { screen: "SearchResults" })}
           />
         </View>

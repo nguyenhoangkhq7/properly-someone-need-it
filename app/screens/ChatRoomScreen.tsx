@@ -42,17 +42,23 @@ const TYPING_DEBOUNCE_MS = 500;
 const FALLBACK_AVATAR = "https://placehold.co/100x100/1F1F1F/F6FF00?text=U";
 
 export default function ChatRoomScreen({ route, navigation }: any) {
-  const { room }: { room: ChatRoomSummary } = route.params;
+  const { room, prefillMessage }: { room: ChatRoomSummary; prefillMessage?: string } = route.params;
   const roomId = room?.roomId;
   const { accessToken, user } = useAuth();
   const chatSocket = useMemo(() => getChatSocket(accessToken ?? null), [accessToken]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(true);
   const [isPeerTyping, setIsPeerTyping] = useState(false);
-  const [inputText, setInputText] = useState("");
+  const [inputText, setInputText] = useState(prefillMessage ?? "");
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTypingRef = useRef(false);
+
+  useEffect(() => {
+    if (prefillMessage) {
+      setInputText(prefillMessage);
+    }
+  }, [prefillMessage]);
 
   if (!room || !roomId) {
     return (

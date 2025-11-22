@@ -1,11 +1,12 @@
-// File: navigator/ChatNavigator.tsx
+﻿// File: navigator/ChatNavigator.tsx
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import ChatListScreen from "../screens/ChatListScreen";
 import ChatRoomScreen from "../screens/ChatRoomScreen";
+import type { ChatRoomSummary } from "../api/chatApi";
 
 export type ChatStackParamList = {
   ChatList: undefined;
-  ChatRoom: { roomId: string; recipient?: any }; // có thể truyền id phòng và người nhận
+  ChatRoom: { room: ChatRoomSummary; prefillMessage?: string };
 };
 
 const Stack = createNativeStackNavigator<ChatStackParamList, "ChatStack">();

@@ -33,7 +33,7 @@ export default function MySellingItemsScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchItems = async () => {
-    if (!user?._id) {
+    if (!user?.id) {
       setError("Chưa đăng nhập");
       setLoading(false);
       setRefreshing(false);
@@ -43,7 +43,7 @@ export default function MySellingItemsScreen() {
     try {
       setError(null);
       const res = await fetch(
-        `http://192.168.1.10:3000/api/items/seller/${user._id}`
+        `http://192.168.1.10:3000/api/items/seller/${user.id}`
       );
       const text = await res.text();
       console.log("Get my selling items", res.status, text);

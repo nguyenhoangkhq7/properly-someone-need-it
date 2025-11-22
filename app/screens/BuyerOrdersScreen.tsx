@@ -59,7 +59,7 @@ export default function BuyerOrdersScreen() {
   const [filterStatus, setFilterStatus] = useState<"ALL" | string>("ALL");
 
   const fetchOrders = async () => {
-    if (!user?._id) {
+    if (!user?.id) {
       setError("Chưa đăng nhập");
       setLoading(false);
       setRefreshing(false);
@@ -73,7 +73,7 @@ export default function BuyerOrdersScreen() {
           ? `?status=${encodeURIComponent(filterStatus)}`
           : "";
       const res = await fetch(
-        `http://192.168.1.10:3000/api/orders/buyer/${user._id}${query}`
+        `http://192.168.1.10:3000/api/orders/buyer/${user.id}${query}`
       );
       const text = await res.text();
       console.log("Get buyer orders", res.status, text);

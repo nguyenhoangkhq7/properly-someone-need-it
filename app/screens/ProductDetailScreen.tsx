@@ -20,9 +20,13 @@ import type { HomeStackParamList } from "../navigator/HomeNavigator";
 import type { Item } from "../types/Item";
 import type { SavedItem } from "../types/SavedItem";
 import { productApi } from "../api/productApi";
-import { getLocationLabel, getLocationLabelAsync } from "../utils/locationLabel";
-import { useUser } from "../context/UserContext";
+import {
+  getLocationLabel,
+  getLocationLabelAsync,
+} from "../utils/locationLabel";
 import { apiClient } from "../api/apiWrapper";
+import { useAuth } from "../context/AuthContext";
+import type { ChatRoomSummary } from "../api/chatApi";
 
 const { width } = Dimensions.get("window");
 
@@ -87,11 +91,10 @@ const haversineKm = (
 };
 
 export default function ProductDetailScreen() {
-  // const navigation =useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const navigation = useNavigation<any>();
   const route = useRoute<ProductDetailScreenRouteProp>();
   const { product: initialProduct } = route.params;
-  const { user } = useUser();
+  const { user } = useAuth();
 
   const [product, setProduct] = useState<ItemWithDistance | null>(
     initialProduct as ItemWithDistance
@@ -111,7 +114,7 @@ export default function ProductDetailScreen() {
     let mounted = true;
     (async () => {
       try {
-        const fresh = await productApi.getById(initialProduct._id, user?._id);
+        const fresh = await productApi.getById(initialProduct._id, user?.id);
         if (mounted && fresh) setProduct(fresh);
       } catch (e) {
         // giữ nguyên dữ liệu khi lỗi
@@ -120,7 +123,7 @@ export default function ProductDetailScreen() {
     return () => {
       mounted = false;
     };
-  }, [initialProduct._id, user?._id]);
+  }, [initialProduct._id, user?.id]);
 
   const images = useMemo(
     () => (product?.images?.length ? product.images : []),
@@ -231,7 +234,8 @@ export default function ProductDetailScreen() {
         const all = await productApi.getAll();
         const others = all
           .filter(
-            (item) => item.sellerId === product.sellerId && item._id !== product._id
+            (item) =>
+              item.sellerId === product.sellerId && item._id !== product._id
           )
           .sort(
             (a, b) =>
@@ -325,7 +329,10 @@ export default function ProductDetailScreen() {
           <Icon name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.headerButton} onPress={handleToggleSave}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={handleToggleSave}
+          >
             <Icon
               name={savedItem ? "heart" : "heart-outline"}
               size={24}
@@ -374,13 +381,13 @@ export default function ProductDetailScreen() {
           </Text>
           <View style={styles.detailRow}>
             <Icon
-          name="location-outline"
-          size={16}
-          color={colors.textSecondary}
-          style={{ marginRight: 4 }}
-        />
-        <Text style={styles.detailValue}>{locationText}</Text>
-      </View>
+              name="location-outline"
+              size={16}
+              color={colors.textSecondary}
+              style={{ marginRight: 4 }}
+            />
+            <Text style={styles.detailValue}>{locationText}</Text>
+          </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Trạng thái:</Text>
             <Text style={styles.detailValue}>
@@ -456,12 +463,12 @@ export default function ProductDetailScreen() {
               <Text style={styles.sellerName}>
                 {seller?.fullName || "Đang cập nhật"}
               </Text>
-              <Text style={styles.sellerStats}>
-                Đánh giá: {formatRating()}
-              </Text>
+              <Text style={styles.sellerStats}>Đánh giá: {formatRating()}</Text>
               <Text style={styles.sellerStats}>{formatSuccessfulTrades()}</Text>
               <Text style={styles.sellerStats}>{formatLastActive()}</Text>
-              <Text style={styles.sellerStats}>Khu vực: {formatLocation()}</Text>
+              <Text style={styles.sellerStats}>
+                Khu vực: {formatLocation()}
+              </Text>
             </View>
           </View>
           <View style={styles.sellerButtons}>
@@ -515,20 +522,6 @@ export default function ProductDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* Footer Buttons */}
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.footerButtonSecondary}>
-          <Icon name="add-circle-outline" size={22} color={colors.primary} />
-          <Text style={styles.footerButtonTextSecondary}>YÊU THÍCH</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.footerButtonPrimary}
-          onPress={handleBuyNow} //Phúc Vinh
-          disabled={isBuying}
-        >
-          <Text style={styles.footerButtonTextPrimary}>MUA NGAY</Text>
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 }
@@ -623,46 +616,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginRight: 8,
     flex: 1,
-  },
-  footer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderColor: colors.border,
-    gap: 10,
-  },
-  footerButtonSecondary: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 12,
-    gap: 6,
-  },
-  footerButtonTextSecondary: {
-    color: colors.primary,
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  footerButtonPrimary: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 12,
-  },
-  footerButtonTextPrimary: {
-    color: colors.background,
-    fontWeight: "800",
-    fontSize: 14,
   },
   ctaRow: {
     flexDirection: "row",
