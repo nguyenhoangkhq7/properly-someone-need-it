@@ -27,7 +27,7 @@ export default function HomeNavigator() {
       <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
       <Stack.Screen name="SearchResults" component={SearchResultsScreen} />
       <Stack.Screen name="AllRatingScreen" component={AllRatingScreen} />
-      <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
+      <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />  
       
     </Stack.Navigator>
   );

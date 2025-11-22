@@ -60,7 +60,7 @@ export default function ProductDetailScreen() {
     setQuantity((prev) => Math.max(1, prev + amount));
   };
 
-  // Hàm chọn mua ngay
+  // Hàm chọn mua ngay (Phúc Vinh)
   const handleBuyNow = async () => {
     try {
       setIsBuying(true);
@@ -251,9 +251,9 @@ export default function ProductDetailScreen() {
           <Icon name="add-circle-outline" size={22} color={colors.primary} />
           <Text style={styles.footerButtonTextSecondary}>YÊU THÍCH</Text>
         </TouchableOpacity>
-        <TouchableOpacity
+        <TouchableOpacity 
           style={styles.footerButtonPrimary}
-          onPress={handleBuyNow}
+          onPress={handleBuyNow} //Phúc Vinh
           disabled={isBuying}
         >
           <Text style={styles.footerButtonTextPrimary}>MUA NGAY</Text>

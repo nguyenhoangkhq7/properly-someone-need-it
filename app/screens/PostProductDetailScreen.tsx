@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Alert } from "react-native";
 import {
   StyleSheet,
   View,
@@ -63,11 +64,13 @@ const ConditionButton = ({
   </TouchableOpacity>
 );
 
+
 export default function ProductDetailScreen() {
 
-  const navigation= useNavigation<any>();
-  const route= useRoute<PostProductDetailScreenProps>();
+  const navigation = useNavigation<any>();
+  const route = useRoute<PostProductDetailScreenProps>();
   const [product, setProductState] = useState(route.params?.product);
+  const [priceError, setPriceError] = useState("");
 
 
   const [selectedCondition, setSelectedCondition] = useState<string | null>(
@@ -86,328 +89,363 @@ export default function ProductDetailScreen() {
     // Bật: giá có thể thương lượng, Tắt: giá cố định
     setIsZeroDongProduct(newValue);
   };
-  
+
+  const handleNavigateNext = () => {
+    if (!product?.images || product.images.length === 0) {
+      Alert.alert("Thiếu ảnh", "Vui lòng đăng ít nhất 1 ảnh sản phẩm.");
+      return;
+    }
+
+    // Validate tên
+    if (!title.trim()) {
+      Alert.alert("Thiếu tên sản phẩm", "Tên sản phẩm không được bỏ trống.");
+      return;
+    }
+
+    // Validate tình trạng
+    if (!selectedCondition) {
+      Alert.alert("Thiếu tình trạng", "Vui lòng chọn tình trạng sản phẩm.");
+      return;
+    }
+
+    // Validate giá
+    const numPrice = Number(price);
+    if (!price || isNaN(numPrice)) {
+      Alert.alert("Giá không hợp lệ", "Vui lòng nhập giá hợp lệ.");
+      return;
+    }
+
+    if (numPrice < 20000) {
+      Alert.alert(
+        "Giá quá thấp",
+        "Giá tối thiểu là 20.000 VNĐ. Vui lòng nhập lại."
+      );
+      return;
+    }
+
+    // Nếu hợp lệ → đi tiếp
+    navigation.navigate("ShippingDetailScreen", {
+      product: {
+        ...product,
+        title,
+        description,
+        brand,
+        modelName,
+        subcategory,
+        category,
+        price: numPrice,
+        condition: selectedCondition,
+        isNegotiable: isZeroDongProduct,
+      },
+    });
+  };
+
+
   return (
     <SafeAreaView style={styles.screen}>
-       <StatusBar 
+      <StatusBar
         barStyle="light-content" // chữ trắng cho dark mode
         backgroundColor="#111"    // nền trùng với header/scroll
-  />
+      />
       <KeyboardAvoidingView
         style={styles.flex1}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : -40}
       >
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={28} color="#555" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Chi tiết về sản phẩm</Text>
-        <View style={{ width: 28 }} />{/* Placeholder for spacing */}
-      </View>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="chevron-back" size={28} color="#555" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Chi tiết về sản phẩm</Text>
+          <View style={{ width: 28 }} />{/* Placeholder for spacing */}
+        </View>
 
-      {/* Progress Bar */}
-      <View style={styles.progressBarContainer}>
-        <View style={styles.progressBar} />
-      </View>
+        {/* Progress Bar */}
+        <View style={styles.progressBarContainer}>
+          <View style={styles.progressBar} />
+        </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Phần Đăng ảnh/video */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleContainer}>
-              <Text style={styles.sectionTitle}>Đăng ảnh/video</Text>
-              <Text style={styles.requiredStar}> *</Text>
-              <TouchableOpacity style={{ marginLeft: 4 }}>
-                <Ionicons name="information-circle-outline" size={18} color="#888" />
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Phần Đăng ảnh/video */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleContainer}>
+                <Text style={styles.sectionTitle}>Đăng ảnh/video</Text>
+                <Text style={styles.requiredStar}> *</Text>
+                <TouchableOpacity style={{ marginLeft: 4 }}>
+                  <Ionicons name="information-circle-outline" size={18} color="#888" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.imageUploadContainer}>
+              {/* Ảnh bìa từ product.images nếu có, fallback placeholder. Cho phép chọn ảnh bìa */}
+              <TouchableOpacity
+                style={styles.imagePreviewBox}
+                onPress={() => {
+                  // Sau này có thể mở modal grid chọn ảnh bìa
+                }}
+              >
+                <Image
+                  source={
+                    product?.images && product.images.length > 0
+                      ? { uri: product.images[0] }
+                      : COVER_IMAGE_PLACEHOLDER
+                  }
+                  style={styles.imagePreview}
+                />
+                <View style={styles.coverLabel}>
+                  <Text style={styles.coverLabelText}>Bìa</Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Nút thêm ảnh - quay lại PostProduct để chụp thêm */}
+              <TouchableOpacity
+                style={styles.addMediaButton}
+                onPress={() => navigation.navigate('PostProduct', { product })}
+              >
+                <Ionicons name="camera-outline" size={32} color={colors.accent} />
+                <Text style={styles.addMediaText}>+ Thêm ảnh</Text>
               </TouchableOpacity>
             </View>
-          </View>
 
-          <View style={styles.imageUploadContainer}>
-            {/* Ảnh bìa từ product.images nếu có, fallback placeholder. Cho phép chọn ảnh bìa */}
-            <TouchableOpacity
-              style={styles.imagePreviewBox}
-              onPress={() => {
-                // Sau này có thể mở modal grid chọn ảnh bìa
-              }}
-            >
-              <Image
-                source={
-                  product?.images && product.images.length > 0
-                    ? { uri: product.images[0] }
-                    : COVER_IMAGE_PLACEHOLDER
-                }
-                style={styles.imagePreview}
-              />
-              <View style={styles.coverLabel}>
-                <Text style={styles.coverLabelText}>Bìa</Text>
-              </View>
-            </TouchableOpacity>
-            
-            {/* Nút thêm ảnh - quay lại PostProduct để chụp thêm */}
-            <TouchableOpacity
-              style={styles.addMediaButton}
-              onPress={() => navigation.navigate('PostProduct', { product })}
-            >
-              <Ionicons name="camera-outline" size={32} color={colors.accent} />
-              <Text style={styles.addMediaText}>+ Thêm ảnh</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Thanh chọn ảnh bìa từ danh sách ảnh đã chụp */}
-          {product?.images && product.images.length > 1 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ marginTop: 10 }}
-            >
-              {product.images.map((imgUri: string, idx: number) => (
-                <TouchableOpacity
-                  key={imgUri + idx}
-                  onPress={() => {
-                    if (!product?.images) return;
-                    const newImages = [...product.images];
-                    const [selected] = newImages.splice(idx, 1);
-                    const reordered = [selected, ...newImages];
-                    const updated = { ...product, images: reordered };
-                    setProductState(updated);
-                  }}
-                  style={{ marginRight: 8 }}
-                >
-                  <Image
-                    source={{ uri: imgUri }}
-                    style={{
-                      width: 60,
-                      height: 60,
-                      borderRadius: 8,
-                      borderWidth: idx === 0 ? 2 : 1,
-                      borderColor: idx === 0 ? colors.accent : '#555',
+            {/* Thanh chọn ảnh bìa từ danh sách ảnh đã chụp */}
+            {product?.images && product.images.length > 1 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginTop: 10 }}
+              >
+                {product.images.map((imgUri: string, idx: number) => (
+                  <TouchableOpacity
+                    key={imgUri + idx}
+                    onPress={() => {
+                      if (!product?.images) return;
+                      const newImages = [...product.images];
+                      const [selected] = newImages.splice(idx, 1);
+                      const reordered = [selected, ...newImages];
+                      const updated = { ...product, images: reordered };
+                      setProductState(updated);
                     }}
-                  />
+                    style={{ marginRight: 8 }}
+                  >
+                    <Image
+                      source={{ uri: imgUri }}
+                      style={{
+                        width: 60,
+                        height: 60,
+                        borderRadius: 8,
+                        borderWidth: idx === 0 ? 2 : 1,
+                        borderColor: idx === 0 ? colors.accent : '#555',
+                      }}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+
+          {/* Phần Chọn Danh Mục */}
+          <View style={styles.section}>
+            <View style={styles.sectionTitleContainer}>
+              <Text style={styles.sectionTitle}>Danh mục</Text>
+              <Text style={styles.requiredStar}> *</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
+              {[
+                { key: "PHONE", label: "Điện thoại" },
+                { key: "LAPTOP", label: "Laptop" },
+                { key: "TABLET", label: "Tablet" },
+                { key: "WATCH", label: "Đồng hồ" },
+                { key: "HEADPHONE", label: "Tai nghe" },
+                { key: "ACCESSORY", label: "Phụ kiện" },
+                { key: "OTHER", label: "Khác" },
+              ].map((c) => (
+                <TouchableOpacity
+                  key={c.key}
+                  style={[
+                    styles.categoryChip,
+                    category === c.key && styles.categoryChipActive,
+                  ]}
+                  onPress={() => setCategory(c.key)}
+                >
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      category === c.key && styles.categoryChipTextActive,
+                    ]}
+                  >
+                    {c.label}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          )}
-        </View>
-
-        {/* Phần Chọn Danh Mục */}
-        <View style={styles.section}>
-          <View style={styles.sectionTitleContainer}>
-            <Text style={styles.sectionTitle}>Danh mục</Text>
-            <Text style={styles.requiredStar}> *</Text>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
-            {[
-              { key: "PHONE", label: "Điện thoại" },
-              { key: "LAPTOP", label: "Laptop" },
-              { key: "TABLET", label: "Tablet" },
-              { key: "WATCH", label: "Đồng hồ" },
-              { key: "HEADPHONE", label: "Tai nghe" },
-              { key: "ACCESSORY", label: "Phụ kiện" },
-              { key: "OTHER", label: "Khác" },
-            ].map((c) => (
-              <TouchableOpacity
-                key={c.key}
-                style={[
-                  styles.categoryChip,
-                  category === c.key && styles.categoryChipActive,
-                ]}
-                onPress={() => setCategory(c.key)}
-              >
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    category === c.key && styles.categoryChipTextActive,
-                  ]}
-                >
-                  {c.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
 
-        {/* Phần Tên sản phẩm */}
-        <View style={styles.section}>
-          <View style={styles.sectionTitleContainer}>
-            <Text style={styles.sectionTitle}>Tên sản phẩm</Text>
-            <Text style={styles.requiredStar}> *</Text>
-          </View>
-          <TextInput
-            style={styles.textInput}
-            placeholder="Tiêu đề"
-            placeholderTextColor="#999"
-            value={title}
-            onChangeText={setTitle}
-          />
-        </View>
-
-        {/* Phần Tình trạng */}
-        <View style={styles.section}>
-          <View style={styles.sectionTitleContainer}>
-            <Text style={styles.sectionTitle}>Tình trạng</Text>
-            <Text style={styles.requiredStar}> *</Text>
-          </View>
-          <View style={styles.conditionContainer}>
-            <ConditionButton
-              title="Mới"
-              description="Hàng mới kèm mác, chưa mở hộp/bao bì, chưa qua sử dụng."
-              isSelected={selectedCondition === 'Mới'}
-              onPress={() => setSelectedCondition('Mới')}
-            />
-            <ConditionButton
-              title="Tốt"
-              description="Đã sử dụng vài lần. Vẫn hoạt động tốt. Có vài vết xước nhỏ."
-              isSelected={selectedCondition === 'Tốt'}
-              onPress={() => setSelectedCondition('Tốt')}
-            />
-            <ConditionButton
-              title="Như mới"
-              description="Hàng mới kèm mác, đã mở bao bì/hộp, chưa qua sử dụng."
-              isSelected={selectedCondition === 'Như mới'}
-              onPress={() => setSelectedCondition('Như mới')}
-            />
-            <ConditionButton
-              title="Trung bình"
-              description="Hàng đã qua sử dụng, đầy đủ chức năng. Nhiều sai sót hoặc lỗi nhỏ."
-              isSelected={selectedCondition === 'Trung bình'}
-              onPress={() => setSelectedCondition('Trung bình')}
-            />
-            {/* NÚT MỚI ĐƯỢC THÊM */}
-            <ConditionButton
-              title="Kém"
-              description="Đã qua sử dụng. Có nhiều lỗi và có thể bị hỏng (miêu tả chi tiết chỗ bị lỗi, hỏng)."
-              isSelected={selectedCondition === 'Kém'}
-              onPress={() => setSelectedCondition('Kém')}
-            />
-          </View>
-        </View>
-
-        {/* --- CÁC PHẦN MỚI BẮT ĐẦU TỪ ĐÂY --- */}
-
-        {/* Phần Giá sản phẩm */}
-        <View style={styles.section}>
-          <View style={styles.sectionTitleContainer}>
-            <Text style={styles.sectionTitle}>Giá sản phẩm</Text>
-            <Text style={styles.requiredStar}> *</Text>
-          </View>
-          <View style={styles.priceInputContainer}>
+          {/* Phần Tên sản phẩm */}
+          <View style={styles.section}>
+            <View style={styles.sectionTitleContainer}>
+              <Text style={styles.sectionTitle}>Tên sản phẩm</Text>
+              <Text style={styles.requiredStar}> *</Text>
+            </View>
             <TextInput
-              style={styles.priceInput}
-              placeholder="Tối thiểu 20,000 VNĐ"
+              style={styles.textInput}
+              placeholder="Tiêu đề"
               placeholderTextColor="#999"
-              keyboardType="numeric"
-              value={price}
-              onChangeText={setPrice}
-              editable={!isZeroDongProduct} // Không cho nhập nếu là sản phẩm 0đ
+              value={title}
+              onChangeText={setTitle}
             />
-            <Text style={styles.currencyLabel}>VNĐ</Text>
           </View>
-        </View>
 
-        {/* Phần Giá có thể thương lượng */}
-        <View style={[styles.section, styles.rowSection]}>
-          <View style={styles.sectionTitleContainer}>
-            <Text style={styles.sectionTitle}>Giá có thể thương lượng</Text>
-            <TouchableOpacity style={{ marginLeft: 4 }}>
-              <Ionicons name="help-circle-outline" size={18} color="#888" />
-            </TouchableOpacity>
+          {/* Phần Tình trạng */}
+          <View style={styles.section}>
+            <View style={styles.sectionTitleContainer}>
+              <Text style={styles.sectionTitle}>Tình trạng</Text>
+              <Text style={styles.requiredStar}> *</Text>
+            </View>
+            <View style={styles.conditionContainer}>
+              <ConditionButton
+                title="Mới"
+                description="Hàng mới kèm mác, chưa mở hộp/bao bì, chưa qua sử dụng."
+                isSelected={selectedCondition === 'Mới'}
+                onPress={() => setSelectedCondition('Mới')}
+              />
+              <ConditionButton
+                title="Tốt"
+                description="Đã sử dụng vài lần. Vẫn hoạt động tốt. Có vài vết xước nhỏ."
+                isSelected={selectedCondition === 'Tốt'}
+                onPress={() => setSelectedCondition('Tốt')}
+              />
+              <ConditionButton
+                title="Như mới"
+                description="Hàng mới kèm mác, đã mở bao bì/hộp, chưa qua sử dụng."
+                isSelected={selectedCondition === 'Như mới'}
+                onPress={() => setSelectedCondition('Như mới')}
+              />
+              <ConditionButton
+                title="Trung bình"
+                description="Hàng đã qua sử dụng, đầy đủ chức năng. Nhiều sai sót hoặc lỗi nhỏ."
+                isSelected={selectedCondition === 'Trung bình'}
+                onPress={() => setSelectedCondition('Trung bình')}
+              />
+              {/* NÚT MỚI ĐƯỢC THÊM */}
+              <ConditionButton
+                title="Kém"
+                description="Đã qua sử dụng. Có nhiều lỗi và có thể bị hỏng (miêu tả chi tiết chỗ bị lỗi, hỏng)."
+                isSelected={selectedCondition === 'Kém'}
+                onPress={() => setSelectedCondition('Kém')}
+              />
+            </View>
           </View>
-          <Switch
-            trackColor={{ false: '#ccc', true: '#f9d3bf' }}
-            thumbColor={isZeroDongProduct ? colors.accent : '#f4f3f4'}
-            onValueChange={handleZeroDongSwitch} 
-            value={isZeroDongProduct}
-          />
+
+          {/* --- CÁC PHẦN MỚI BẮT ĐẦU TỪ ĐÂY --- */}
+
+          {/* Phần Giá sản phẩm */}
+          <View style={styles.section}>
+            <View style={styles.sectionTitleContainer}>
+              <Text style={styles.sectionTitle}>Giá sản phẩm</Text>
+              <Text style={styles.requiredStar}> *</Text>
+            </View>
+            <View style={styles.priceInputContainer}>
+              <TextInput
+                style={styles.priceInput}
+                placeholder="Tối thiểu 20,000 VNĐ"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
+                value={price}
+                onChangeText={setPrice}
+              // editable={!isZeroDongProduct} // Không cho nhập nếu là sản phẩm 0đ
+              />
+              <Text style={styles.currencyLabel}>đ</Text>
+            </View>
+          </View>
+
+          {/* Phần Giá có thể thương lượng */}
+          <View style={[styles.section, styles.rowSection]}>
+            <View style={styles.sectionTitleContainer}>
+              <Text style={styles.sectionTitle}>Giá có thể thương lượng</Text>
+              <TouchableOpacity style={{ marginLeft: 4 }}>
+                <Ionicons name="help-circle-outline" size={18} color="#888" />
+              </TouchableOpacity>
+            </View>
+            <Switch
+              trackColor={{ false: '#ccc', true: '#f9d3bf' }}
+              thumbColor={isZeroDongProduct ? colors.accent : '#f4f3f4'}
+              onValueChange={handleZeroDongSwitch}
+              value={isZeroDongProduct}
+            />
+          </View>
+
+          {/* Phần Màu sắc - ĐÃ CẬP NHẬT */}
+          <View style={styles.section}>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Thương hiệu (Brand)"
+              placeholderTextColor="#999"
+              value={brand}
+              onChangeText={setBrand}
+            />
+            <Text style={styles.inputLabel}>Thương hiệu</Text>
+          </View>
+
+          {/* Phần Model name */}
+          <View style={styles.section}>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Model sản phẩm (Model name)"
+              placeholderTextColor="#999"
+              value={modelName}
+              onChangeText={setModelName}
+            />
+            <Text style={styles.inputLabel}>Model</Text>
+          </View>
+
+          {/* Phần Subcategory */}
+          <View style={styles.section}>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Danh mục con (Subcategory) - tùy chọn"
+              placeholderTextColor="#999"
+              value={subcategory}
+              onChangeText={setSubcategory}
+            />
+            <Text style={styles.inputLabel}>Subcategory</Text>
+          </View>
+
+          {/* PHẦN MÔ TẢ MỚI */}
+          <View style={styles.section}>
+            <TextInput
+              style={[styles.textInput, styles.descriptionInput]}
+              placeholder="Mô tả chi tiết sản phẩm..."
+              placeholderTextColor="#999"
+              multiline={true}
+              numberOfLines={5}
+              value={description}
+              onChangeText={setDescription}
+            />
+            <Text style={styles.inputLabel}>Mô tả</Text>
+          </View>
+
+          {/* --- KẾT THÚC CÁC PHẦN MỚI --- */}
+
+        </ScrollView>
+
+        {/* Footer Button */}
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={styles.nextButton}
+            activeOpacity={0.8}
+            onPress={() => handleNavigateNext()}
+          >
+            <Text style={styles.nextButtonText}>TIẾP THEO</Text>
+          </TouchableOpacity>
+          <View style={styles.bottomBarPlaceholder} />
         </View>
-
-        {/* Phần Màu sắc - ĐÃ CẬP NHẬT */}
-        <View style={styles.section}>
-          <TextInput
-            style={styles.textInput}
-            placeholder="Thương hiệu (Brand)"
-            placeholderTextColor="#999"
-            value={brand}
-            onChangeText={setBrand}
-          />
-          <Text style={styles.inputLabel}>Thương hiệu</Text>
-        </View>
-
-        {/* Phần Model name */}
-        <View style={styles.section}>
-          <TextInput
-            style={styles.textInput}
-            placeholder="Model sản phẩm (Model name)"
-            placeholderTextColor="#999"
-            value={modelName}
-            onChangeText={setModelName}
-          />
-          <Text style={styles.inputLabel}>Model</Text>
-        </View>
-
-        {/* Phần Subcategory */}
-        <View style={styles.section}>
-          <TextInput
-            style={styles.textInput}
-            placeholder="Danh mục con (Subcategory) - tùy chọn"
-            placeholderTextColor="#999"
-            value={subcategory}
-            onChangeText={setSubcategory}
-          />
-          <Text style={styles.inputLabel}>Subcategory</Text>
-        </View>
-        
-        {/* PHẦN MÔ TẢ MỚI */}
-        <View style={styles.section}>
-          <TextInput
-            style={[styles.textInput, styles.descriptionInput]}
-            placeholder="Mô tả chi tiết sản phẩm..."
-            placeholderTextColor="#999"
-            multiline={true}
-            numberOfLines={5}
-            value={description}
-            onChangeText={setDescription}
-          />
-          <Text style={styles.inputLabel}>Mô tả</Text>
-        </View>
-
-        {/* --- KẾT THÚC CÁC PHẦN MỚI --- */}
-
-      </ScrollView>
-
-      {/* Footer Button */}
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={styles.nextButton}
-          activeOpacity={0.8}
-          onPress={() =>
-            navigation.navigate('ShippingDetailScreen', {
-              product: {
-                ...product,
-                title,
-                description,
-                brand,
-                modelName,
-                subcategory,
-                category,
-                price: price ? Number(price) : 0,
-                condition: selectedCondition,
-                // Bật switch = giá có thể thương lượng
-                isNegotiable: isZeroDongProduct,
-              },
-            })
-          }
-        >
-          <Text style={styles.nextButtonText}>TIẾP THEO</Text>
-        </TouchableOpacity>
-        <View style={styles.bottomBarPlaceholder} />
-      </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -420,20 +458,20 @@ const styles = StyleSheet.create({
     paddingTop: StatusBar.currentHeight || 0,
     flex: 1,
     backgroundColor: '#111', // nền dark
-},
-flex1: {
-  flex: 1,
-},
-header: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  paddingHorizontal: 12,
-  paddingVertical: 10,
-  backgroundColor: '#111', // nền đồng bộ với StatusBar
-  borderBottomWidth: 1,
-  borderBottomColor: '#222',
-},
+  },
+  flex1: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#111', // nền đồng bộ với StatusBar
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '500',

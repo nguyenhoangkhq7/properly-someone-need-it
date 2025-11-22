@@ -58,6 +58,8 @@ export default function AccountScreen() {
       {/* 2. Stats & Balance */}
       <StatsBalanceSection />
 
+{/* --Phúc Vinh-- */}
+
       {/* Nút chuyển sang trang Đơn bán hàng */}
       <TouchableOpacity
         style={styles.sellerOrdersButton}
@@ -81,6 +83,8 @@ export default function AccountScreen() {
       >
         <Text style={styles.sellerOrdersText}>Sản phẩm đang bán</Text>
       </TouchableOpacity>
+
+{/* --End Phúc Vinh-- */}
 
       {/* 4. Option Lists */}
       <MenuOptionList list={optionList1} />
