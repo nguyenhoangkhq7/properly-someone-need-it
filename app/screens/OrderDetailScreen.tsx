@@ -13,6 +13,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/Ionicons";
 import colors from "../config/color";
 
+const API_URL="http://192.168.1.10:3000/api";
+
 interface Order {
   _id: string;
   buyerId: string;
@@ -66,7 +68,7 @@ export default function OrderDetailScreen() {
 
       try {
         const res = await fetch(
-          `http://192.168.1.10:3000/api/orders/${orderId}`
+          `${API_URL}/orders/${orderId}`
         );
         const text = await res.text();
         console.log("Get order raw response", res.status, text);
@@ -182,7 +184,7 @@ export default function OrderDetailScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => navigation.navigate("HomeScreen")}
         >
           <Icon name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>

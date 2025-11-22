@@ -28,6 +28,8 @@ import { apiClient } from "../api/apiWrapper";
 import { useAuth } from "../context/AuthContext";
 import type { ChatRoomSummary } from "../api/chatApi";
 
+const API_URL ="http://192.168.1.10:3000/api";
+
 const { width } = Dimensions.get("window");
 
 type ProductDetailScreenRouteProp = RouteProp<
@@ -94,7 +96,7 @@ export default function ProductDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<ProductDetailScreenRouteProp>();
   const { product: initialProduct } = route.params;
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
 
   const [product, setProduct] = useState<ItemWithDistance | null>(
     initialProduct as ItemWithDistance
@@ -289,12 +291,19 @@ export default function ProductDetailScreen() {
       setIsBuying(true);
 
       // Tạm thời dùng cứng một _id item thật trong Mongo để test mua hàng
-      const itemId = "691fcded133fbc6269a037dd";
+      const itemId = product?._id;
 
-      const res = await fetch("http://192.168.1.10:3000/api/orders", {
+      if (!accessToken) {
+        // Nếu chưa đăng nhập, chuyển tới màn Login
+        navigation.navigate("Auth", { screen: "Login" });
+        return;
+      }
+
+      const res = await fetch(`${API_URL}/orders`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({ itemId }),
       });
@@ -407,7 +416,7 @@ export default function ProductDetailScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.ctaPrimary}
-              onPress={() => handleMessagePress()}
+              onPress={() => handleBuyNow()}
             >
               <Text style={styles.ctaPrimaryText}>Mua ngay</Text>
             </TouchableOpacity>
