@@ -1,5 +1,5 @@
 // screens/ProductDetailScreen.tsx
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -10,54 +10,272 @@ import {
   StatusBar,
   Dimensions,
   FlatList,
+  SafeAreaView,
 } from "react-native";
-import { RouteProp, useRoute } from "@react-navigation/native";
+import { RouteProp, useRoute, useNavigation } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/Ionicons";
 import colors from "../config/color";
-import { useNavigation } from "@react-navigation/native";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { trendingProducts } from "../data/products";
-import ProductItem from "../components/ProductItem"; // component dùng chung
-import { shop } from "../data/shops";
+import ProductItem from "../components/ProductItem";
 import type { HomeStackParamList } from "../navigator/HomeNavigator";
+import type { Item } from "../types/Item";
+import type { SavedItem } from "../types/SavedItem";
+import { productApi } from "../api/productApi";
+import { getLocationLabel, getLocationLabelAsync } from "../utils/locationLabel";
+import { useUser } from "../context/UserContext";
+import { apiClient } from "../api/apiWrapper";
 
 const { width } = Dimensions.get("window");
 
-// Định nghĩa type cho route
 type ProductDetailScreenRouteProp = RouteProp<
   HomeStackParamList,
   "ProductDetail"
 >;
 
-const OtherProductCard = ({
-  imageUri,
-  price,
-}: {
-  imageUri: string;
-  price: string;
-}) => (
-  <TouchableOpacity style={styles.otherProductCard}>
-    <Image source={{ uri: imageUri }} style={styles.otherProductImage} />
-    <View style={styles.otherProductInfo}>
-      <Text style={styles.otherProductPrice}>{price}</Text>
-      <View style={styles.otherProductTag}>
-        <Text style={styles.otherProductTagText}>FREE</Text>
-      </View>
-    </View>
-  </TouchableOpacity>
-);
+type ItemWithDistance = Item & { distanceKm?: number };
+type SellerInfo = {
+  _id: string;
+  fullName: string;
+  phone?: string;
+  avatar?: string;
+  rating?: number;
+  reviewCount?: number;
+  successfulTrades?: number;
+  lastActiveAt?: string;
+  address?: { city?: string; district?: string };
+};
+
+const conditionLabel: Record<Item["condition"], string> = {
+  LIKE_NEW: "Như mới",
+  GOOD: "Tốt",
+  FAIR: "Ổn",
+  POOR: "Cũ",
+};
+
+const statusLabel: Record<Item["status"], string> = {
+  ACTIVE: "Còn hàng",
+  PENDING: "Có người đang mua",
+  SOLD: "Đã bán",
+  DELETED: "Đã xóa",
+};
+
+const lazyRequire = (name: string) => {
+  try {
+    // eslint-disable-next-line no-eval
+    const req = eval("require");
+    return req(name);
+  } catch (_e) {
+    return null;
+  }
+};
+
+const fallbackCoords = { lat: 21.0285, lng: 105.8542 }; // Hanoi center fallback
+const haversineKm = (
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number }
+) => {
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+  return R * c;
+};
 
 export default function ProductDetailScreen() {
   // const navigation =useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const navigation = useNavigation<any>();
   const route = useRoute<ProductDetailScreenRouteProp>();
-  const { product } = route.params; // Nhận product từ ProductList
+  const { product: initialProduct } = route.params;
+  const { user } = useUser();
 
-  const [quantity, setQuantity] = useState(1);
-  const [isBuying, setIsBuying] = useState(false);
+  const [product, setProduct] = useState<ItemWithDistance | null>(
+    initialProduct as ItemWithDistance
+  );
+  const [related, setRelated] = useState<Item[]>([]);
+  const [savedItem, setSavedItem] = useState<SavedItem | null>(null);
+  const [distanceKm, setDistanceKm] = useState<number | null>(
+    (initialProduct as ItemWithDistance)?.distanceKm ?? null
+  );
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
+    null
+  );
+  const [seller, setSeller] = useState<SellerInfo | null>(null);
 
-  const handleQuantityChange = (amount: number) => {
-    setQuantity((prev) => Math.max(1, prev + amount));
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const fresh = await productApi.getById(initialProduct._id, user?._id);
+        if (mounted && fresh) setProduct(fresh);
+      } catch (e) {
+        // giữ nguyên dữ liệu khi lỗi
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [initialProduct._id, user?._id]);
+
+  const images = useMemo(
+    () => (product?.images?.length ? product.images : []),
+    [product]
+  );
+  const [locationLabel, setLocationLabel] = useState(
+    getLocationLabel(product?.location)
+  );
+  const coordKey = JSON.stringify(product?.location?.coordinates || []);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const sellerId = product?.sellerId;
+      if (!sellerId) return;
+      try {
+        const info = await apiClient.get<SellerInfo>(`/users/${sellerId}`);
+        if (active) setSeller(info);
+      } catch (e) {
+        console.warn("seller fetch error", e);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [product?.sellerId]);
+
+  useEffect(() => {
+    let active = true;
+    getLocationLabelAsync(product?.location).then((label) => {
+      if (active) setLocationLabel(label);
+    });
+    return () => {
+      active = false;
+    };
+  }, [coordKey]);
+
+  const resolveLocation = async () => {
+    const Location = lazyRequire("expo-location");
+    if (!Location) return null;
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm || perm.status !== "granted") return null;
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      return {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      };
+    } catch (_e) {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      if (distanceKm != null) return;
+      const c = product?.location?.coordinates;
+      if (!c || c.length < 2) return;
+      const loc = coords || (await resolveLocation()) || fallbackCoords;
+      if (!coords) setCoords(loc);
+      const [lng, lat] = c;
+      const km = haversineKm(loc, { lat, lng });
+      if (active) setDistanceKm(Math.round(km * 10) / 10);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [coordKey, distanceKm, coords]);
+
+  const locationText =
+    distanceKm != null
+      ? `${locationLabel} - Khoảng cách ~${distanceKm} km`
+      : locationLabel;
+
+  const handleMessagePress = (preset?: string) => {
+    const chatPayload = {
+      name: seller?.fullName || "Đang cập nhật",
+      avatar:
+        seller?.avatar || product?.images?.[0] || "https://picsum.photos/200",
+      roomId: product?._id || "",
+    };
+    navigation.navigate("Chat", {
+      screen: "ChatRoom",
+      params: { chat: chatPayload, prefillMessage: preset },
+    });
+  };
+
+  const handleToggleSave = () => {
+    if (savedItem) {
+      setSavedItem(null);
+    } else if (product) {
+      setSavedItem({
+        itemId: product._id,
+        savedAt: new Date().toISOString(),
+        title: product.title,
+      });
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      if (!product?.sellerId) return;
+      try {
+        const all = await productApi.getAll();
+        const others = all
+          .filter(
+            (item) => item.sellerId === product.sellerId && item._id !== product._id
+          )
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        if (active) setRelated(others);
+      } catch (e) {
+        console.warn("related fetch error", e);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [product?._id, product?.sellerId]);
+
+  const formatLocation = () => {
+    if (seller?.address?.city || seller?.address?.district) {
+      return [seller?.address?.district, seller?.address?.city]
+        .filter(Boolean)
+        .join(", ");
+    }
+    return "Đang cập nhật";
+  };
+
+  const formatLastActive = () => {
+    if (!seller?.lastActiveAt) return "Hoạt động gần đây";
+    const last = new Date(seller.lastActiveAt);
+    return `Hoạt động: ${last.toLocaleDateString()}`;
+  };
+
+  const formatRating = () => {
+    if (seller?.rating != null) {
+      const base = `${seller.rating.toFixed(1)}/5`;
+      return seller.reviewCount
+        ? `${base} (${seller.reviewCount} đánh giá)`
+        : base;
+    }
+    return "Chưa có đánh giá";
+  };
+
+  const formatSuccessfulTrades = () => {
+    if (seller?.successfulTrades != null) {
+      return `${seller.successfulTrades} giao dịch thành công`;
+    }
+    return "Chưa có giao dịch";
   };
 
   // Hàm chọn mua ngay (Phúc Vinh)
@@ -94,8 +312,8 @@ export default function ProductDetailScreen() {
   };
 
   return (
-    <View style={styles.screen}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.surface} />
 
       {/* Header */}
       <View style={styles.header}>
@@ -106,10 +324,17 @@ export default function ProductDetailScreen() {
           <Icon name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.headerButton}>
-            <Icon name="heart-outline" size={24} color={colors.text} />
+          <TouchableOpacity style={styles.headerButton} onPress={handleToggleSave}>
+            <Icon
+              name={savedItem ? "heart" : "heart-outline"}
+              size={24}
+              color={savedItem ? colors.primary : colors.text}
+            />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerButton}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => handleMessagePress()}
+          >
             <Icon name="chatbubble-outline" size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
@@ -118,27 +343,67 @@ export default function ProductDetailScreen() {
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         {/* Product Image */}
         <View style={styles.imageContainer}>
-          <Image source={{ uri: product.image }} style={styles.productImage} />
+          <FlatList
+            data={images}
+            horizontal
+            pagingEnabled
+            keyExtractor={(uri, idx) => `${uri}-${idx}`}
+            showsHorizontalScrollIndicator={false}
+            renderItem={({ item: uri }) => (
+              <Image source={{ uri }} style={styles.productImage} />
+            )}
+            ListEmptyComponent={
+              <View style={styles.productImage}>
+                <Text style={styles.imageCounterText}>Không có ảnh</Text>
+              </View>
+            }
+          />
           <View style={styles.imageCounter}>
-            <Text style={styles.imageCounterText}>Hiện tất cả ảnh 1/8</Text>
+            <Text style={styles.imageCounterText}>
+              {`Hình ${images.length ? 1 : 0}/${images.length || 0}`}
+            </Text>
           </View>
         </View>
 
         {/* Product Info */}
         <View style={styles.section}>
-          <Text style={styles.productTitle}>{product.title}</Text>
-          <Text style={styles.productPrice}>{product.price}</Text>
-          {product.discount && (
-            <View style={styles.tag}>
-              <Icon
-                name="shield-checkmark-outline"
-                size={16}
-                color={colors.primary}
-              />
-              <Text style={styles.tagText}>{product.discount}</Text>
-            </View>
-          )}
-          {product.originalPrice && <Text>{product.originalPrice}</Text>}
+          <Text style={styles.productTitle}>{product?.title}</Text>
+          <Text style={styles.productPrice}>
+            {product ? `${product.price.toLocaleString()} đ` : ""}
+          </Text>
+          <View style={styles.detailRow}>
+            <Icon
+          name="location-outline"
+          size={16}
+          color={colors.textSecondary}
+          style={{ marginRight: 4 }}
+        />
+        <Text style={styles.detailValue}>{locationText}</Text>
+      </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Trạng thái:</Text>
+            <Text style={styles.detailValue}>
+              {product ? statusLabel[product.status] : ""}
+            </Text>
+          </View>
+          <View style={styles.ctaRow}>
+            <TouchableOpacity
+              style={[styles.ctaPrimary, styles.ctaSpacing]}
+              onPress={() =>
+                handleMessagePress(
+                  "Xin chào, mình muốn thương lượng giá sản phẩm này."
+                )
+              }
+            >
+              <Text style={styles.ctaPrimaryText}>Thương lượng</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.ctaPrimary}
+              onPress={() => handleMessagePress()}
+            >
+              <Text style={styles.ctaPrimaryText}>Mua ngay</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.divider} />
@@ -147,7 +412,9 @@ export default function ProductDetailScreen() {
         <View style={styles.section}>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Tình trạng:</Text>
-            <Text style={styles.detailValue}>Mới</Text>
+            <Text style={styles.detailValue}>
+              {product ? conditionLabel[product.condition] : ""}
+            </Text>
             <Icon
               name="information-circle-outline"
               size={16}
@@ -155,70 +422,63 @@ export default function ProductDetailScreen() {
             />
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Nhãn hiệu:</Text>
-            <Text style={styles.detailValue}>UNIE</Text>
+            <Text style={styles.detailLabel}>Danh mục:</Text>
+            <Text style={styles.detailValue}>{product?.category}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Màu sắc:</Text>
-            <Text style={styles.detailValue}>Trắng</Text>
+            <Text style={styles.detailLabel}>Thỏa thuận giá:</Text>
+            <Text style={styles.detailValue}>
+              {product?.isNegotiable ? "Có" : "Không"}
+            </Text>
           </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        {/* Quantity */}
-        <View style={[styles.section, styles.quantitySection]}>
-          <Text style={styles.detailLabel}>Số lượng:</Text>
-          <View style={styles.quantityStepper}>
-            <TouchableOpacity
-              style={styles.stepperButton}
-              onPress={() => handleQuantityChange(-1)}
-            >
-              <Text style={styles.stepperText}>-</Text>
-            </TouchableOpacity>
-            <Text style={styles.quantityValue}>{quantity}</Text>
-            <TouchableOpacity
-              style={styles.stepperButton}
-              onPress={() => handleQuantityChange(1)}
-            >
-              <Text style={styles.stepperText}>+</Text>
-            </TouchableOpacity>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Mô tả:</Text>
           </View>
-          <Text style={styles.stockText}>1 còn hàng</Text>
+          <Text style={styles.descriptionText}>{product?.description}</Text>
         </View>
 
         <View style={styles.divider} />
 
         {/* Seller Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Thông tin người bán</Text>
+          <Text style={styles.sectionTitle}>Thông tin shop</Text>
           <View style={styles.sellerInfo}>
             <Image
-              source={require("../../assets/peopple.jpg")}
+              source={
+                seller?.avatar
+                  ? { uri: seller.avatar }
+                  : require("../../assets/peopple.jpg")
+              }
               style={styles.sellerAvatar}
             />
             <View style={styles.sellerDetails}>
-              <Text style={styles.sellerName}>Tuấn Phú</Text>
-              <Text style={styles.sellerStats}>
-                0 Đã bán • 0 Đánh giá (0/5)
+              <Text style={styles.sellerName}>
+                {seller?.fullName || "Đang cập nhật"}
               </Text>
+              <Text style={styles.sellerStats}>
+                Đánh giá: {formatRating()}
+              </Text>
+              <Text style={styles.sellerStats}>{formatSuccessfulTrades()}</Text>
+              <Text style={styles.sellerStats}>{formatLastActive()}</Text>
+              <Text style={styles.sellerStats}>Khu vực: {formatLocation()}</Text>
             </View>
           </View>
           <View style={styles.sellerButtons}>
             <TouchableOpacity
               style={styles.sellerButton}
-              onPress={() => navigation.navigate("ShopScreen", { shop })}
+              onPress={() => navigation.navigate("ShopScreen", { shop: {} })}
             >
               <Text style={styles.sellerButtonText}>XEM SHOP</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.sellerButton}
-              onPress={()=> navigation.navigate("HomeStack", {
-                screen: "SearchResults",
-                // params: { query: "Tuấn Phú" },
-              })}
+              onPress={() =>
+                navigation.navigate("HomeStack", {
+                  screen: "SearchResults",
+                })
+              }
             >
-              <Text style={styles.sellerButtonText}>SẢN PHẨM (70)</Text>
+              <Text style={styles.sellerButtonText}>SẢN PHẨM</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -229,18 +489,27 @@ export default function ProductDetailScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Sản phẩm khác của shop</Text>
-            <TouchableOpacity onPress={()=> navigation.navigate("HomeStack", {screen: "SearchResults"})}>
+            <TouchableOpacity
+              onPress={() =>
+                navigation.navigate("HomeStack", { screen: "SearchResults" })
+              }
+            >
               <Text style={styles.seeAllText}>Xem tất cả</Text>
             </TouchableOpacity>
           </View>
 
           <FlatList
-            data={trendingProducts}
+            data={related}
             renderItem={({ item }) => <ProductItem product={item} horizontal />}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item._id}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingLeft: 12 }}
+            ListEmptyComponent={
+              <Text style={[styles.detailValue, { padding: 12 }]}>
+                Chưa có thêm sản phẩm nào từ shop này.
+              </Text>
+            }
           />
         </View>
       </ScrollView>
@@ -264,56 +533,43 @@ export default function ProductDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
+  safeArea: {
     flex: 1,
     backgroundColor: colors.background,
   },
   container: {
     flex: 1,
   },
-  // Header
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingTop: (StatusBar.currentHeight || 0) + 10,
-    paddingBottom: 10,
+    paddingHorizontal: 14,
+    paddingTop: (StatusBar.currentHeight || 0) + 16,
+    paddingBottom: 14,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderColor: colors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
   },
   headerButton: {
-    padding: 5,
+    padding: 8,
   },
   headerIcons: {
     flexDirection: "row",
     alignItems: "center",
   },
-  cartBadge: {
-    position: "absolute",
-    top: -5,
-    right: -5,
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    width: 20,
-    height: 20,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  cartBadgeText: {
-    color: colors.background,
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  // Image
   imageContainer: {
     width: width,
-    height: width, // Ảnh vuông
+    height: width * 0.85,
   },
   productImage: {
-    width: "100%",
-    height: "100%",
+    width: width,
+    height: width * 0.85,
   },
   imageCounter: {
     position: "absolute",
@@ -328,9 +584,8 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 12,
   },
-  // Section chung
   section: {
-    padding: 15,
+    padding: 16,
     backgroundColor: colors.surface,
   },
   divider: {
@@ -340,34 +595,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: colors.border,
   },
-  // Product Info
   productTitle: {
     color: colors.text,
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: "bold",
     lineHeight: 24,
   },
   productPrice: {
     color: colors.primary,
-    fontSize: 24,
-    fontWeight: "bold",
-    marginVertical: 10,
+    fontSize: 26,
+    fontWeight: "800",
+    marginVertical: 12,
   },
-  tag: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.border,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 5,
-    alignSelf: "flex-start",
-  },
-  tagText: {
-    color: colors.primary,
-    marginLeft: 6,
-    fontSize: 12,
-  },
-  // Details
   detailRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -376,46 +615,41 @@ const styles = StyleSheet.create({
   detailLabel: {
     color: colors.textSecondary,
     fontSize: 14,
-    width: 80,
+    width: 120,
   },
   detailValue: {
     color: colors.text,
     fontSize: 14,
     marginRight: 8,
+    flex: 1,
   },
-  // Quantity
-  quantitySection: {
+  ctaRow: {
     flexDirection: "row",
+    marginTop: 12,
+  },
+  ctaSpacing: {
+    marginRight: 8,
+  },
+  ctaPrimary: {
+    flex: 1,
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
   },
-  quantityStepper: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 5,
+  ctaPrimaryText: {
+    color: colors.background,
+    fontWeight: "800",
+    fontSize: 13,
+    textTransform: "uppercase",
   },
-  stepperButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: colors.background,
-  },
-  stepperText: {
+  descriptionText: {
     color: colors.text,
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  quantityValue: {
-    color: colors.text,
-    fontSize: 16,
-    paddingHorizontal: 15,
-  },
-  stockText: {
-    color: colors.textSecondary,
     fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 10,
   },
-  // Seller
   sectionTitle: {
     color: colors.text,
     fontSize: 16,
@@ -431,7 +665,7 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: colors.accent,
   },
   sellerDetails: {
     marginLeft: 12,
@@ -464,7 +698,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "bold",
   },
-  // Other Products
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -473,94 +706,5 @@ const styles = StyleSheet.create({
   seeAllText: {
     color: colors.textSecondary,
     fontSize: 13,
-  },
-  otherProductCard: {
-    width: 150,
-    backgroundColor: colors.background,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: 10,
-    overflow: "hidden",
-  },
-  otherProductImage: {
-    width: 150,
-    height: 150,
-  },
-  otherProductInfo: {
-    padding: 8,
-  },
-  otherProductPrice: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  otherProductTag: {
-    backgroundColor: colors.accent,
-    borderRadius: 5,
-    paddingHorizontal: 4,
-    alignSelf: "flex-start",
-    marginTop: 4,
-  },
-  otherProductTagText: {
-    color: colors.background,
-    fontSize: 10,
-    fontWeight: "bold",
-  },
-  // Description
-  descriptionText: {
-    color: colors.text,
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 10,
-  },
-  bulletPoint: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 4,
-  },
-  bulletText: {
-    color: colors.text,
-    fontSize: 14,
-    marginLeft: 8,
-    flex: 1, // Cho phép text xuống dòng
-  },
-  // Footer
-  footer: {
-    flexDirection: "row",
-    position: "absolute",
-    bottom: 0,
-    width: "100%",
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderColor: colors.border,
-  },
-  footerButtonSecondary: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRightWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  footerButtonTextSecondary: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: "bold",
-    marginLeft: 8,
-  },
-  footerButtonPrimary: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    backgroundColor: colors.primary,
-  },
-  footerButtonTextPrimary: {
-    color: colors.background,
-    fontSize: 14,
-    fontWeight: "bold",
   },
 });

@@ -1,48 +1,34 @@
 import React from "react";
-import {
-  View,
-  TextInput,
-  TouchableOpacity,
-  Text,
-  StyleSheet,
-} from "react-native";
-import { Feather } from "@expo/vector-icons"; // ✅ SỬ DỤNG ICON FEATHER
+import { View, TextInput, TouchableOpacity, Text, StyleSheet } from "react-native";
 import colors from "../config/color";
 
 interface SearchBarProps {
   searchQuery: string;
   setSearchQuery: (text: string) => void;
-  onSearchPress: () => void; // ✅ THÊM PROP ĐIỀU HƯỚNG
+  onSearchPress: () => void;
 }
 
 const finalColors = {
-    ...colors,
-    textSecondary: colors.textSecondary || "#BDBDBD",
-    border: colors.border || "#232621",
+  ...colors,
+  textSecondary: colors.textSecondary || "#BDBDBD",
+  border: colors.border || "#232621",
 };
 
 const SearchBar: React.FC<SearchBarProps> = ({
   searchQuery,
   setSearchQuery,
-  onSearchPress, // ✅ SỬ DỤNG PROP
+  onSearchPress,
 }) => {
   return (
     <View style={styles.searchContainer}>
-      {/* Icon Lọc (Tương tự như trong hình ảnh) */}
-      <TouchableOpacity style={styles.filterButton}>
-        <Feather name="filter" size={20} color={finalColors.primary} />
-      </TouchableOpacity>
-      
       <TextInput
         style={styles.searchInput}
-        placeholder="Tìm bằng từ khóa..."
+        placeholder="Tim bang tu khoa..."
         placeholderTextColor={finalColors.textSecondary}
         value={searchQuery}
         onChangeText={setSearchQuery}
-        onSubmitEditing={onSearchPress} // ✅ Kích hoạt tìm kiếm khi nhấn Enter/Go
+        onSubmitEditing={onSearchPress}
       />
-      
-      {/* Nút GO */}
       <TouchableOpacity style={styles.searchButton} onPress={onSearchPress}>
         <Text style={styles.searchButtonText}>GO</Text>
       </TouchableOpacity>
@@ -54,18 +40,9 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 0, // Đã xóa padding ngang vì Homescreen đã có padding 16
-    paddingVertical: 8, 
-    backgroundColor: finalColors.background,
-  },
-  filterButton: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 0,
     paddingVertical: 8,
-    marginRight: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: finalColors.border,
-    backgroundColor: finalColors.surface,
+    backgroundColor: finalColors.background,
   },
   searchInput: {
     flex: 1,
@@ -76,8 +53,7 @@ const styles = StyleSheet.create({
     backgroundColor: finalColors.surface,
     borderRadius: 8,
     marginRight: 10,
-    // Bỏ border để trông liền mạch với nền
-    borderWidth: 0, 
+    borderWidth: 0,
   },
   searchButton: {
     backgroundColor: finalColors.primary,
@@ -88,7 +64,7 @@ const styles = StyleSheet.create({
   searchButtonText: {
     color: finalColors.background,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
 });
 

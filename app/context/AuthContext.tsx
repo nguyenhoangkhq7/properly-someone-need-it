@@ -3,6 +3,7 @@ import React, { createContext, useState, useContext, ReactNode, useEffect } from
 // import AsyncStorage from '@react-native-async-storage/async-storage';
 import  colors  from '../config/color'; // Đường dẫn tới file màu của bạn
 import { View, ActivityIndicator } from 'react-native';
+import { UserProvider } from './UserContext';
 
 interface User {
   _id: string;

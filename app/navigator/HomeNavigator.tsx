@@ -11,7 +11,13 @@ import OrderDetailScreen from "../screens/OrderDetailScreen";
 export type HomeStackParamList = {
   HomeScreen: undefined;
   ShopScreen: { shop: any };
-  SearchResults: { query?: string; category?: string };
+  SearchResults: {
+    query?: string;
+    category?: string;
+    from?: "nearYou" | "forYou";
+    userId?: string;
+    coords?: { lat: number; lng: number };
+  };
   ProductDetail: { product: any }; // ✅ thêm dòng này
   AllRatingScreen: undefined;
   OrderDetail: { orderId: string };

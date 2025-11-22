@@ -1,70 +1,228 @@
-// File: screens/SearchResultsScreen.tsx
-import React, { useState, useEffect } from "react";
-import { View, FlatList, StyleSheet, Dimensions } from "react-native";
-// ✅ IMPORT DỮ LIỆU TỪ ĐƯỜNG DẪN CỦA BẠN
-import { featuredProducts, Product } from "../data/products";
-
-// Import các component
+﻿// screens/SearchResultScreen.tsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { View, FlatList, StyleSheet } from "react-native";
 import SearchHeader from "../components/SearchHeader";
 import FilterSortBar from "../components/FilterSortBar";
 import ProductCard from "../components/ProductCard";
 import colors from "../config/color";
-
-const { width } = Dimensions.get("window");
+import { productApi } from "../api/productApi";
+import type { Item } from "../types/Item";
+import { useUser } from "../context/UserContext";
 
 const finalColors = {
   ...colors,
   background: colors.background || "#0A0A0A",
 };
 
-// Hàm chuyển đổi giá trị string sang số để sắp xếp
-const parsePrice = (priceString: string): number => {
-  // Chuyển "X.XXX.XXX ₫" thành số (ví dụ: "15.000.000 ₫" -> 15000000)
-  return parseInt(priceString.replace(/\./g, "").replace(" ₫", ""));
-};
+type ItemWithScore = Item & { similarity?: number; distanceKm?: number };
 
 export default function SearchResultsScreen({ route, navigation }: any) {
-  const { query, category } = route.params || {}; // 👈 thêm category
+  const {
+    query,
+    category,
+    from,
+    userId: routeUserId,
+    coords: initialCoords,
+  } = route.params || {};
+  const { user } = useUser();
+  const userId = user?._id || routeUserId;
 
-  // Nếu có query thì dùng query, còn không thì dùng category
-  const initialSearch = query || category || "";
-
-  const [searchText, setSearchText] = useState(initialSearch);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>(
-    featuredProducts as Product[]
+  const [searchText, setSearchText] = useState<string>(query || "");
+  const [items, setItems] = useState<ItemWithScore[]>([]);
+  const [filtered, setFiltered] = useState<ItemWithScore[]>([]);
+  const [activeFilter, setActiveFilter] = useState<string>("all"); // all | zeroPrice
+  const [sortType, setSortType] = useState<string>("default"); // default | priceAsc | priceDesc | newest
+  const [loading, setLoading] = useState(false);
+  const [nearMe, setNearMe] = useState(from === "nearYou");
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
+    initialCoords || null
   );
-  const [activeFilter, setActiveFilter] = useState<string>("all");
-  const [sortType, setSortType] = useState<string>("default");
+  const lastRequestedQuery = useRef<string>("");
+
+  const fallbackCoords = { lat: 21.0285, lng: 105.8542 }; // Hanoi center
+
+  const lazyRequire = (name: string) => {
+    try {
+      // eslint-disable-next-line no-eval
+      const req = eval("require");
+      return req(name);
+    } catch (_e) {
+      return null;
+    }
+  };
+
+  const resolveLocation = async () => {
+    const Location = lazyRequire("expo-location");
+    if (!Location) return null;
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm || perm.status !== "granted") return null;
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      return {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      };
+    } catch (_e) {
+      return null;
+    }
+  };
+
+  const fetchNearBy = async () => {
+    setLoading(true);
+    try {
+      const origin = coords || (await resolveLocation()) || fallbackCoords;
+      setCoords(origin);
+      const data = await productApi.getNearBy(origin.lat, origin.lng, 5000);
+      setItems(data);
+      setNearMe(true);
+    } catch (e) {
+      console.warn("nearby search error", e);
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchForYouList = async () => {
+    setLoading(true);
+    try {
+      if (userId) {
+        const personalized = await productApi.getForYou(userId);
+        if (personalized && personalized.length) {
+          setItems(personalized);
+          return;
+        }
+      }
+      const latest = await productApi.getNewItems();
+      setItems(latest);
+    } catch (e) {
+      console.warn("forYou search error", e);
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchSemantic = async (text?: string) => {
+    const currentQuery = (text ?? searchText).trim();
+    lastRequestedQuery.current = currentQuery;
+    setLoading(true);
+    try {
+      let data: ItemWithScore[] = [];
+      if (currentQuery) {
+        data = await productApi.search(currentQuery, userId, 50);
+      } else {
+        data = await productApi.getAll();
+      }
+      if (lastRequestedQuery.current === currentQuery) {
+        setItems(data);
+      }
+    } catch (e) {
+      console.warn("semantic search error", e);
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let data = featuredProducts as Product[];
+    setSearchText(query || "");
+    setActiveFilter("all");
+    setSortType("default");
 
-    // ✅ Lọc theo từ khóa hoặc danh mục
-    if (searchText) {
-      data = data.filter((p) =>
-        p.title.toLowerCase().includes(searchText.toLowerCase())
-      );
+    if (from === "nearYou") {
+      setNearMe(true);
+      fetchNearBy();
+      return;
     }
 
-    // ✅ Lọc theo bộ lọc
-    if (activeFilter === "freeShip") {
-      // data = data.filter((p) => p.freeShip);
+    if (from === "forYou") {
+      setNearMe(false);
+      fetchForYouList();
+      return;
     }
 
-    // ✅ Sắp xếp
-    const sortedData = [...data];
+    setNearMe(false);
+    fetchSemantic(query || "");
+  }, [from, query, userId]);
+
+  useEffect(() => {
+    if (!nearMe || coords) return;
+    resolveLocation().then((loc) => {
+      if (loc) setCoords(loc);
+    });
+  }, [nearMe, coords]);
+
+  const filteredData = useMemo(() => {
+    let data: ItemWithScore[] = [...items];
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const distanceKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+      const R = 6371;
+      const dLat = toRad(b.lat - a.lat);
+      const dLon = toRad(b.lng - a.lng);
+      const lat1 = toRad(a.lat);
+      const lat2 = toRad(b.lat);
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(h));
+    };
+
+    if (category) {
+      data = data.filter((p) => p.category === category);
+    }
+
+    if (activeFilter === "zeroPrice") {
+      data = data.filter((p) => p.price === 0);
+    }
+
+    if (nearMe) {
+      const origin = coords || fallbackCoords;
+      data = data
+        .map((p) => {
+          if (!p.location?.coordinates?.length) return null;
+          const [lng, lat] = p.location.coordinates;
+          const km = distanceKm(origin, { lat, lng });
+          return { ...p, distanceKm: Math.round(km * 10) / 10 };
+        })
+        .filter((p) => p && p.distanceKm !== undefined && p.distanceKm <= 5) as ItemWithScore[];
+
+      if (sortType === "default") {
+        data.sort(
+          (a, b) =>
+            (a.distanceKm ?? Number.POSITIVE_INFINITY) -
+            (b.distanceKm ?? Number.POSITIVE_INFINITY)
+        );
+      }
+    }
+
     if (sortType === "priceAsc") {
-      sortedData.sort((a, b) => parsePrice(a.price) - parsePrice(b.price));
+      data.sort((a, b) => a.price - b.price);
     } else if (sortType === "priceDesc") {
-      sortedData.sort((a, b) => parsePrice(b.price) - parsePrice(a.price));
+      data.sort((a, b) => b.price - a.price);
+    } else if (sortType === "newest") {
+      data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
 
-    setFilteredProducts(sortedData);
-  }, [searchText, activeFilter, sortType]);
+    return data;
+  }, [items, category, activeFilter, sortType, nearMe, coords]);
 
-  const renderItem = ({ item }: { item: Product }) => (
-    <ProductCard item={item} />
-  );
+  useEffect(() => {
+    setFiltered(filteredData);
+  }, [filteredData]);
+
+  const handleSubmit = () => {
+    fetchSemantic(searchText);
+  };
+
+  const handleRefresh = () => {
+    if (searchText.trim()) {
+      return fetchSemantic(searchText);
+    }
+    if (from === "nearYou") return fetchNearBy();
+    if (from === "forYou") return fetchForYouList();
+    return fetchSemantic(searchText);
+  };
 
   return (
     <View style={styles.fullScreenContainer}>
@@ -72,24 +230,34 @@ export default function SearchResultsScreen({ route, navigation }: any) {
         searchText={searchText}
         setSearchText={setSearchText}
         onBackPress={() => navigation.goBack()}
+        onSubmit={handleSubmit}
       />
 
       <FilterSortBar
-        totalResults={filteredProducts.length}
+        totalResults={filtered.length}
         activeFilter={activeFilter}
         setActiveFilter={setActiveFilter}
         sortType={sortType}
         setSortType={setSortType}
+        nearMe={nearMe}
+        setNearMe={setNearMe}
       />
 
       <FlatList
-        data={filteredProducts}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
+        data={filtered}
+        renderItem={({ item }) => (
+          <ProductCard
+            item={item}
+            onPress={() => navigation.navigate("ProductDetail", { product: item })}
+          />
+        )}
+        keyExtractor={(item) => item._id}
         numColumns={2}
         columnWrapperStyle={styles.columnWrapper}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+        refreshing={loading}
+        onRefresh={handleRefresh}
       />
     </View>
   );
