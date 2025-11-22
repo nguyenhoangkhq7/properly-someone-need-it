@@ -17,9 +17,15 @@ const finalColors = {
 type ItemWithScore = Item & { similarity?: number; distanceKm?: number };
 
 export default function SearchResultsScreen({ route, navigation }: any) {
-  const { query, category } = route.params || {};
+  const {
+    query,
+    category,
+    from,
+    userId: routeUserId,
+    coords: initialCoords,
+  } = route.params || {};
   const { user } = useUser();
-  const userId = user?._id;
+  const userId = user?._id || routeUserId;
 
   const [searchText, setSearchText] = useState<string>(query || "");
   const [items, setItems] = useState<ItemWithScore[]>([]);
@@ -27,8 +33,10 @@ export default function SearchResultsScreen({ route, navigation }: any) {
   const [activeFilter, setActiveFilter] = useState<string>("all"); // all | zeroPrice
   const [sortType, setSortType] = useState<string>("default"); // default | priceAsc | priceDesc | newest
   const [loading, setLoading] = useState(false);
-  const [nearMe, setNearMe] = useState(false);
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [nearMe, setNearMe] = useState(from === "nearYou");
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
+    initialCoords || null
+  );
   const lastRequestedQuery = useRef<string>("");
 
   const fallbackCoords = { lat: 21.0285, lng: 105.8542 }; // Hanoi center
@@ -61,6 +69,42 @@ export default function SearchResultsScreen({ route, navigation }: any) {
     }
   };
 
+  const fetchNearBy = async () => {
+    setLoading(true);
+    try {
+      const origin = coords || (await resolveLocation()) || fallbackCoords;
+      setCoords(origin);
+      const data = await productApi.getNearBy(origin.lat, origin.lng, 5000);
+      setItems(data);
+      setNearMe(true);
+    } catch (e) {
+      console.warn("nearby search error", e);
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchForYouList = async () => {
+    setLoading(true);
+    try {
+      if (userId) {
+        const personalized = await productApi.getForYou(userId);
+        if (personalized && personalized.length) {
+          setItems(personalized);
+          return;
+        }
+      }
+      const latest = await productApi.getNewItems();
+      setItems(latest);
+    } catch (e) {
+      console.warn("forYou search error", e);
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fetchSemantic = async (text?: string) => {
     const currentQuery = (text ?? searchText).trim();
     lastRequestedQuery.current = currentQuery;
@@ -84,8 +128,25 @@ export default function SearchResultsScreen({ route, navigation }: any) {
   };
 
   useEffect(() => {
+    setSearchText(query || "");
+    setActiveFilter("all");
+    setSortType("default");
+
+    if (from === "nearYou") {
+      setNearMe(true);
+      fetchNearBy();
+      return;
+    }
+
+    if (from === "forYou") {
+      setNearMe(false);
+      fetchForYouList();
+      return;
+    }
+
+    setNearMe(false);
     fetchSemantic(query || "");
-  }, [query]);
+  }, [from, query, userId]);
 
   useEffect(() => {
     if (!nearMe || coords) return;
@@ -125,6 +186,14 @@ export default function SearchResultsScreen({ route, navigation }: any) {
           return { ...p, distanceKm: Math.round(km * 10) / 10 };
         })
         .filter((p) => p && p.distanceKm !== undefined && p.distanceKm <= 5) as ItemWithScore[];
+
+      if (sortType === "default") {
+        data.sort(
+          (a, b) =>
+            (a.distanceKm ?? Number.POSITIVE_INFINITY) -
+            (b.distanceKm ?? Number.POSITIVE_INFINITY)
+        );
+      }
     }
 
     if (sortType === "priceAsc") {
@@ -144,6 +213,15 @@ export default function SearchResultsScreen({ route, navigation }: any) {
 
   const handleSubmit = () => {
     fetchSemantic(searchText);
+  };
+
+  const handleRefresh = () => {
+    if (searchText.trim()) {
+      return fetchSemantic(searchText);
+    }
+    if (from === "nearYou") return fetchNearBy();
+    if (from === "forYou") return fetchForYouList();
+    return fetchSemantic(searchText);
   };
 
   return (
@@ -179,7 +257,7 @@ export default function SearchResultsScreen({ route, navigation }: any) {
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
         refreshing={loading}
-        onRefresh={() => fetchSemantic(searchText)}
+        onRefresh={handleRefresh}
       />
     </View>
   );

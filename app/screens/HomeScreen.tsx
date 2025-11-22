@@ -211,6 +211,7 @@ const HomeScreen = () => {
                 query: "",
                 from: "nearYou",
                 userId,
+                coords,
               })
             }
           />

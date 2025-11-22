@@ -13,7 +13,10 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { HomeStackParamList } from "../navigator/HomeNavigator";
 import type { Item } from "../types/Item";
-import { getLocationLabelAsync, getLocationLabel } from "../utils/locationLabel";
+import {
+  getLocationLabelAsync,
+  getLocationLabel,
+} from "../utils/locationLabel";
 
 const { width } = Dimensions.get("window");
 const cardWidth = (width - 40) / 2;
@@ -78,7 +81,7 @@ export default function ProductItem({ product, horizontal = false }: Props) {
             style={styles.distanceIcon}
           />
           <Text style={styles.distanceText} numberOfLines={1}>
-            {`Cach ban ~${product.distanceKm} km`}
+            {`~${product.distanceKm} km`}
           </Text>
         </View>
       )}
@@ -162,7 +165,7 @@ const styles = StyleSheet.create({
   },
   distanceText: {
     color: colors.primary,
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "700",
   },
   metaRow: {
@@ -175,7 +178,7 @@ const styles = StyleSheet.create({
   },
   locationText: {
     color: colors.textSecondary,
-    fontSize: 13,
+    fontSize: 10,
     flex: 1,
   },
 });

@@ -34,6 +34,27 @@ const fallbackFromCoords = (location?: ItemLocation) => {
   return FALLBACK_TEXT;
 };
 
+const reverseGeocodeViaHttp = async (lat: number, lng: number) => {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "properly-app/1.0 (location-label)" },
+    });
+    const text = await res.text();
+    try {
+      const data = JSON.parse(text);
+      if (res.ok && data?.display_name) {
+        return String(data.display_name);
+      }
+    } catch (_parseErr) {
+      // ignore parse errors; will fall back
+    }
+  } catch (_e) {
+    // network error; will fall back
+  }
+  return null;
+};
+
 export async function getLocationLabelAsync(
   location?: ItemLocation
 ): Promise<string> {
@@ -52,36 +73,38 @@ export async function getLocationLabelAsync(
   }
 
   const fetchPromise = (async () => {
-    if (!LocationModule?.reverseGeocodeAsync) {
-      const fb = fallbackFromCoords(location);
-      labelCache.set(cacheKey, fb);
-      return fb;
-    }
-
+    const trySaveAndReturn = (label: string | null) => {
+      const value = label || fallbackFromCoords(location);
+      labelCache.set(cacheKey, value);
+      return value;
+    };
     try {
-      if (LocationModule.requestForegroundPermissionsAsync) {
-        await LocationModule.requestForegroundPermissionsAsync().catch(() => {});
-      }
+      if (LocationModule?.reverseGeocodeAsync) {
+        if (LocationModule.requestForegroundPermissionsAsync) {
+          await LocationModule.requestForegroundPermissionsAsync().catch(() => {});
+        }
 
-      const results = await LocationModule.reverseGeocodeAsync({
-        latitude: lat,
-        longitude: lng,
-      });
+        const results = await LocationModule.reverseGeocodeAsync({
+          latitude: lat,
+          longitude: lng,
+        });
 
-      if (results?.length) {
-        const addr = formatAddress(results[0]);
-        if (addr) {
-          labelCache.set(cacheKey, addr);
-          return addr;
+        if (results?.length) {
+          const addr = formatAddress(results[0]);
+          if (addr) {
+            return trySaveAndReturn(addr);
+          }
         }
       }
-      const fb = fallbackFromCoords(location);
-      labelCache.set(cacheKey, fb);
-      return fb;
+
+      const external = await reverseGeocodeViaHttp(lat, lng);
+      if (external) {
+        return trySaveAndReturn(external);
+      }
+
+      return trySaveAndReturn(null);
     } catch (_e) {
-      const fb = fallbackFromCoords(location);
-      labelCache.set(cacheKey, fb);
-      return fb;
+      return trySaveAndReturn(null);
     } finally {
       pendingCache.delete(cacheKey);
     }

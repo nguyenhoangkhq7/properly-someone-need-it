@@ -20,8 +20,9 @@ import type { HomeStackParamList } from "../navigator/HomeNavigator";
 import type { Item } from "../types/Item";
 import type { SavedItem } from "../types/SavedItem";
 import { productApi } from "../api/productApi";
-import { getLocationLabel } from "../utils/locationLabel";
+import { getLocationLabel, getLocationLabelAsync } from "../utils/locationLabel";
 import { useUser } from "../context/UserContext";
+import { apiClient } from "../api/apiWrapper";
 
 const { width } = Dimensions.get("window");
 
@@ -31,6 +32,17 @@ type ProductDetailScreenRouteProp = RouteProp<
 >;
 
 type ItemWithDistance = Item & { distanceKm?: number };
+type SellerInfo = {
+  _id: string;
+  fullName: string;
+  phone?: string;
+  avatar?: string;
+  rating?: number;
+  reviewCount?: number;
+  successfulTrades?: number;
+  lastActiveAt?: string;
+  address?: { city?: string; district?: string };
+};
 
 const conditionLabel: Record<Item["condition"], string> = {
   LIKE_NEW: "Như mới",
@@ -91,6 +103,7 @@ export default function ProductDetailScreen() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
     null
   );
+  const [seller, setSeller] = useState<SellerInfo | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -111,8 +124,37 @@ export default function ProductDetailScreen() {
     () => (product?.images?.length ? product.images : []),
     [product]
   );
-  const locationLabel = getLocationLabel(product?.location);
+  const [locationLabel, setLocationLabel] = useState(
+    getLocationLabel(product?.location)
+  );
   const coordKey = JSON.stringify(product?.location?.coordinates || []);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const sellerId = product?.sellerId;
+      if (!sellerId) return;
+      try {
+        const info = await apiClient.get<SellerInfo>(`/users/${sellerId}`);
+        if (active) setSeller(info);
+      } catch (e) {
+        console.warn("seller fetch error", e);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [product?.sellerId]);
+
+  useEffect(() => {
+    let active = true;
+    getLocationLabelAsync(product?.location).then((label) => {
+      if (active) setLocationLabel(label);
+    });
+    return () => {
+      active = false;
+    };
+  }, [coordKey]);
 
   const resolveLocation = async () => {
     const Location = lazyRequire("expo-location");
@@ -156,8 +198,9 @@ export default function ProductDetailScreen() {
 
   const handleMessagePress = (preset?: string) => {
     const chatPayload = {
-      name: "Người bán",
-      avatar: product?.images?.[0] || "https://picsum.photos/200",
+      name: seller?.fullName || "Đang cập nhật",
+      avatar:
+        seller?.avatar || product?.images?.[0] || "https://picsum.photos/200",
       roomId: product?._id || "",
     };
     navigation.navigate("Chat", {
@@ -176,6 +219,62 @@ export default function ProductDetailScreen() {
         title: product.title,
       });
     }
+  };
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      if (!product?.sellerId) return;
+      try {
+        const all = await productApi.getAll();
+        const others = all
+          .filter(
+            (item) => item.sellerId === product.sellerId && item._id !== product._id
+          )
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        if (active) setRelated(others);
+      } catch (e) {
+        console.warn("related fetch error", e);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [product?._id, product?.sellerId]);
+
+  const formatLocation = () => {
+    if (seller?.address?.city || seller?.address?.district) {
+      return [seller?.address?.district, seller?.address?.city]
+        .filter(Boolean)
+        .join(", ");
+    }
+    return "Đang cập nhật";
+  };
+
+  const formatLastActive = () => {
+    if (!seller?.lastActiveAt) return "Hoạt động gần đây";
+    const last = new Date(seller.lastActiveAt);
+    return `Hoạt động: ${last.toLocaleDateString()}`;
+  };
+
+  const formatRating = () => {
+    if (seller?.rating != null) {
+      const base = `${seller.rating.toFixed(1)}/5`;
+      return seller.reviewCount
+        ? `${base} (${seller.reviewCount} đánh giá)`
+        : base;
+    }
+    return "Chưa có đánh giá";
+  };
+
+  const formatSuccessfulTrades = () => {
+    if (seller?.successfulTrades != null) {
+      return `${seller.successfulTrades} giao dịch thành công`;
+    }
+    return "Chưa có giao dịch";
   };
 
   return (
@@ -308,18 +407,26 @@ export default function ProductDetailScreen() {
 
         {/* Seller Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Thông tin người bán</Text>
+          <Text style={styles.sectionTitle}>Thông tin shop</Text>
           <View style={styles.sellerInfo}>
             <Image
-              source={require("../../assets/peopple.jpg")}
+              source={
+                seller?.avatar
+                  ? { uri: seller.avatar }
+                  : require("../../assets/peopple.jpg")
+              }
               style={styles.sellerAvatar}
             />
             <View style={styles.sellerDetails}>
-              <Text style={styles.sellerName}>Người bán</Text>
-              <Text style={styles.sellerStats}>
-                ID: {product?.sellerId || "Đang cập nhật"}
+              <Text style={styles.sellerName}>
+                {seller?.fullName || "Đang cập nhật"}
               </Text>
-              <Text style={styles.sellerStats}>Hoạt động gần đây</Text>
+              <Text style={styles.sellerStats}>
+                Đánh giá: {formatRating()}
+              </Text>
+              <Text style={styles.sellerStats}>{formatSuccessfulTrades()}</Text>
+              <Text style={styles.sellerStats}>{formatLastActive()}</Text>
+              <Text style={styles.sellerStats}>Khu vực: {formatLocation()}</Text>
             </View>
           </View>
           <View style={styles.sellerButtons}>
@@ -347,7 +454,7 @@ export default function ProductDetailScreen() {
         {/* Other Products */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Sản phẩm khác</Text>
+            <Text style={styles.sectionTitle}>Sản phẩm khác của shop</Text>
             <TouchableOpacity
               onPress={() =>
                 navigation.navigate("HomeStack", { screen: "SearchResults" })
@@ -364,6 +471,11 @@ export default function ProductDetailScreen() {
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingLeft: 12 }}
+            ListEmptyComponent={
+              <Text style={[styles.detailValue, { padding: 12 }]}>
+                Chưa có thêm sản phẩm nào từ shop này.
+              </Text>
+            }
           />
         </View>
       </ScrollView>
