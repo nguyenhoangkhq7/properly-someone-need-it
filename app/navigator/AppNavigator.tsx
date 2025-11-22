@@ -7,11 +7,20 @@ import HomeNavigator from "./HomeNavigator";
 import ChatNavigator from "./ChatNavigator";
 import CameraNavigator from "./CameraNavigator";
 
-const Tab = createBottomTabNavigator();
+type AppTabParamList = {
+  HomeStack: undefined;
+  Category: undefined;
+  Chat: undefined;
+  Account: undefined;
+  Center: undefined;
+};
+
+const Tab = createBottomTabNavigator<AppTabParamList, "AppTabs">();
 
 export default function AppNavigator() {
   return (
     <Tab.Navigator
+      id="AppTabs"
       tabBar={(props) => <BottomNav {...props} />} // custom navbar
       screenOptions={{ headerShown: false }}
     >

@@ -1,8 +1,10 @@
 import React from "react";
 import { View, StyleSheet } from "react-native";
 import { Card, Text, Divider, List, TouchableRipple } from "react-native-paper";
-import colors from "../../config/color"; // Giả định đường dẫn này
+import colors from "../../config/color";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 const finalColors = {
     ...colors,
@@ -10,35 +12,40 @@ const finalColors = {
     contact: "#00FFFF",
 };
 
-interface OptionItem {
+export interface OptionItem {
   label: string;
-  icon: string;
+  icon: IconName;
   rightText?: string;
   isSeller?: boolean;
   isVerification?: boolean;
   isWarning?: boolean;
   isContact?: boolean;
+  action?: string;
 }
 
 interface MenuOptionListProps {
   title?: string;
   list: OptionItem[];
+  onPressItem?: (item: OptionItem) => void;
 }
 
-export default function MenuOptionList({ title, list }: MenuOptionListProps) {
+export default function MenuOptionList({ title, list, onPressItem }: MenuOptionListProps) {
   return (
     <View style={styles.listSection}>
       {title ? <Text style={styles.listTitle}>{title}</Text> : null}
       <Card style={styles.optionCard}>
         {list.map((item, i) => (
           <View key={i}>
-            <TouchableRipple onPress={() => console.log(item.label)} style={styles.listItemRipple}>
+            <TouchableRipple
+              onPress={() => onPressItem?.(item)}
+              style={styles.listItemRipple}
+            >
               <List.Item
                 title={item.label}
                 titleStyle={{ color: finalColors.text, fontWeight: item.isWarning ? "700" : "400" }}
                 left={() => (
                   <MaterialCommunityIcons
-                    // name={item.icon}
+                    name={item.icon}
                     size={22} 
                     color={
                       item.isContact

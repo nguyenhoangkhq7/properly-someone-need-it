@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     View,
     Text,
@@ -6,20 +6,15 @@ import {
     Image,
     TouchableOpacity,
     StyleSheet,
+    ActivityIndicator,
+    RefreshControl,
 } from "react-native";
-import { Ionicons, Feather } from "@expo/vector-icons"; 
+import { Ionicons } from "@expo/vector-icons"; 
 import colors from "../config/color";
-import { mockChats } from "../data/mockChats";
-import { useNavigation } from "@react-navigation/native";
-
-interface ChatItem {
-    id: string;
-    name: string;
-    avatar: string;
-    lastMessage: string;
-    time: string;
-    unreadCount: number; 
-}
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { chatApi, type ChatRoomSummary } from "../api/chatApi";
+import { useAuth } from "../context/AuthContext";
+import { getChatSocket } from "../utils/chatSocket";
 
 const finalColors = {
     ...colors,
@@ -32,47 +27,175 @@ const finalColors = {
     border: colors.border || "#232621",
 };
 
+const FALLBACK_AVATAR = "https://placehold.co/100x100/1F1F1F/F6FF00?text=U";
+
 export default function ChatListScreen() {
     const navigation = useNavigation<any>();
 
-    const mockChatsWithUnread: ChatItem[] = (mockChats as ChatItem[]).map((chat, index) => ({
-        ...chat,
-        unreadCount: index === 0 ? 3 : (index === 2 ? 1 : 0), 
-    }));
+    const { accessToken, user } = useAuth();
+    const [rooms, setRooms] = useState<ChatRoomSummary[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const joinedRoomsRef = useRef<Set<string>>(new Set());
 
-    const renderItem = ({ item }: { item: ChatItem }) => {
-        const unread = item.unreadCount || 0;
+    const chatSocket = useMemo(() => getChatSocket(accessToken ?? null), [accessToken]);
+
+    useEffect(() => {
+        joinedRoomsRef.current.clear();
+    }, [accessToken]);
+
+    const formatTime = useCallback((timestamp: string) => {
+        if (!timestamp) return "";
+        const date = new Date(timestamp);
+        if (Number.isNaN(date.getTime())) return "";
+        const now = new Date();
+        const sameDay = date.toDateString() === now.toDateString();
+        if (sameDay) {
+            return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        }
+        return date.toLocaleDateString();
+    }, []);
+
+    const updateRoomSnapshot = useCallback(
+        (snapshot: {
+            roomId: string;
+            lastMessage: string;
+            lastMessageAt: string;
+            buyerId: string;
+            sellerId: string;
+            unreadCount: { buyer: number; seller: number };
+        }) => {
+            if (!user) return;
+            const viewerRole = snapshot.buyerId === user.id ? "buyer" : snapshot.sellerId === user.id ? "seller" : null;
+            if (!viewerRole) return;
+
+            const getTimeValue = (value: string) => {
+                const dateValue = new Date(value).getTime();
+                return Number.isNaN(dateValue) ? 0 : dateValue;
+            };
+
+            setRooms((prev) => {
+                const next = prev.map((room) =>
+                    room.roomId === snapshot.roomId
+                        ? {
+                              ...room,
+                              lastMessage: snapshot.lastMessage,
+                              lastMessageAt: snapshot.lastMessageAt,
+                              unreadCount:
+                                  viewerRole === "buyer"
+                                      ? snapshot.unreadCount.buyer
+                                      : snapshot.unreadCount.seller,
+                          }
+                        : room
+                );
+
+                const exists = next.some((room) => room.roomId === snapshot.roomId);
+                if (!exists) {
+                    return prev;
+                }
+
+                return next.sort((a, b) =>
+                    getTimeValue(b.lastMessageAt) - getTimeValue(a.lastMessageAt)
+                );
+            });
+        },
+        [user]
+    );
+
+    const joinRooms = useCallback(
+        (roomIds: string[]) => {
+            if (!chatSocket) return;
+            roomIds.forEach((roomId) => {
+                if (joinedRoomsRef.current.has(roomId)) return;
+                chatSocket.emit("room:join", { roomId });
+                joinedRoomsRef.current.add(roomId);
+            });
+        },
+        [chatSocket]
+    );
+
+    const loadRooms = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const data = await chatApi.getRooms();
+            setRooms(data);
+            joinRooms(data.map((room) => room.roomId));
+        } catch (error) {
+            console.error("Failed to load chat rooms", error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [joinRooms]);
+
+    const refreshRooms = useCallback(async () => {
+        setIsRefreshing(true);
+        try {
+            const data = await chatApi.getRooms();
+            setRooms(data);
+            joinRooms(data.map((room) => room.roomId));
+        } catch (error) {
+            console.error("Failed to refresh chat rooms", error);
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, [joinRooms]);
+
+    useFocusEffect(
+        useCallback(() => {
+            void loadRooms();
+        }, [loadRooms])
+    );
+
+    useEffect(() => {
+        if (!chatSocket || !user) return;
+
+        const handleRoomUpdate = (snapshot: any) => {
+            updateRoomSnapshot(snapshot);
+        };
+
+        chatSocket.on("room:update", handleRoomUpdate);
+
+        return () => {
+            chatSocket.off("room:update", handleRoomUpdate);
+        };
+    }, [chatSocket, updateRoomSnapshot, user]);
+
+    useEffect(() => {
+        joinRooms(rooms.map((room) => room.roomId));
+    }, [joinRooms, rooms]);
+
+    const renderItem = ({ item }: { item: ChatRoomSummary }) => {
+        const unreadCount = item.unreadCount ?? 0;
         return (
-            <TouchableOpacity
-                style={styles.chatItem}
-                onPress={() => navigation.navigate("ChatRoom", { chat: item })}
-            >
-                <Image source={{ uri: item.avatar }} style={styles.avatar} />
-                
-                <View style={styles.chatContent}>
-                    <Text style={styles.name}>{item.name}</Text>
-                    <Text 
-                        style={[
-                            styles.lastMessage, 
-                            // ✅ SỬA LỖI: Chỉ áp dụng styles.unreadLastMessage nếu count > 0
-                            unread > 0 && styles.unreadLastMessage
-                        ]} 
-                        numberOfLines={1}
-                    >
-                        {item.lastMessage}
-                    </Text>
-                </View>
+        <TouchableOpacity
+            style={styles.chatItem}
+            onPress={() => navigation.navigate("ChatRoom", { room: item })}
+        >
+            <Image source={{ uri: item.peer.avatar ?? FALLBACK_AVATAR }} style={styles.avatar} />
+            
+            <View style={styles.chatContent}>
+                <Text style={styles.name}>{item.peer.name}</Text>
+                <Text 
+                    style={[
+                        styles.lastMessage, 
+                        unreadCount > 0 && styles.unreadLastMessage
+                    ]} 
+                    numberOfLines={1}
+                >
+                    {item.lastMessage || "Chưa có tin nhắn"}
+                </Text>
+            </View>
 
-                <View style={styles.metaContainer}>
-                    <Text style={styles.time}>{item.time}</Text>
-                    {unread > 0 && (
-                        <View style={styles.unreadBadge}>
-                            <Text style={styles.unreadCountText}>{unread > 99 ? '99+' : unread}</Text>
-                        </View>
-                    )}
-                </View>
-            </TouchableOpacity>
-        );
+            <View style={styles.metaContainer}>
+                <Text style={styles.time}>{formatTime(item.lastMessageAt)}</Text>
+                {unreadCount > 0 && (
+                    <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadCountText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                    </View>
+                )}
+            </View>
+        </TouchableOpacity>
+    );
     };
 
     return (
@@ -86,12 +209,32 @@ export default function ChatListScreen() {
            
             </View>
 
-            <FlatList
-                data={mockChatsWithUnread}
-                renderItem={renderItem}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={{ paddingBottom: 20 }}
-            />
+            {isLoading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator color={finalColors.primary} size="large" />
+                </View>
+            ) : (
+                <FlatList
+                    data={rooms}
+                    renderItem={renderItem}
+                    keyExtractor={(item) => item.roomId}
+                    contentContainerStyle={{ paddingBottom: 20, flexGrow: rooms.length === 0 ? 1 : undefined }}
+                    ListEmptyComponent={
+                        <View style={styles.emptyState}>
+                            <Ionicons name="chatbubble-ellipses" size={48} color={finalColors.muted} />
+                            <Text style={styles.emptyTitle}>Chưa có cuộc trò chuyện nào</Text>
+                            <Text style={styles.emptySubtitle}>Hãy bắt đầu trao đổi với người bán hoặc người mua.</Text>
+                        </View>
+                    }
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={isRefreshing}
+                            tintColor={finalColors.primary}
+                            onRefresh={() => void refreshRooms()}
+                        />
+                    }
+                />
+            )}
         </View>
     );
 }
@@ -183,5 +326,28 @@ const styles = StyleSheet.create({
         color: "#FFFFFF", 
         fontSize: 11,
         fontWeight: 'bold',
-    }
+    },
+    loadingContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyState: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 32,
+    },
+    emptyTitle: {
+        marginTop: 16,
+        color: finalColors.text,
+        fontSize: 18,
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+    emptySubtitle: {
+        marginTop: 8,
+        color: finalColors.muted,
+        textAlign: 'center',
+    },
 });

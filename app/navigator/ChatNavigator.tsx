@@ -8,11 +8,11 @@ export type ChatStackParamList = {
   ChatRoom: { roomId: string; recipient?: any }; // có thể truyền id phòng và người nhận
 };
 
-const Stack = createNativeStackNavigator<ChatStackParamList>();
+const Stack = createNativeStackNavigator<ChatStackParamList, "ChatStack">();
 
 export default function ChatNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator id="ChatStack" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ChatList" component={ChatListScreen} />
       <Stack.Screen name="ChatRoom" component={ChatRoomScreen} />
     </Stack.Navigator>

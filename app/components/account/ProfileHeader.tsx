@@ -1,7 +1,8 @@
 import React from "react";
 import { View, StyleSheet } from "react-native";
-import { Text, Button, TouchableRipple } from "react-native-paper";
-import colors from "../../config/color"; // Giả định đường dẫn này
+import { Text } from "react-native-paper";
+import colors from "../../config/color";
+import type { AuthUser } from "../../context/AuthContext";
 
 const finalColors = {
     ...colors,
@@ -9,35 +10,43 @@ const finalColors = {
     contact: "#00FFFF",
 };
 
-export default function ProfileHeader() {
+interface ProfileHeaderProps {
+  user: AuthUser | null;
+}
+
+export default function ProfileHeader({ user }: ProfileHeaderProps) {
+  const initials = (user?.fullName || user?.email || user?.phone || "?")
+    .trim()
+    .charAt(0)
+    .toUpperCase();
+  const fullName = user?.fullName ?? "Người dùng mới";
+  const email = user?.email ?? "Chưa cập nhật email";
+  const phone = user?.phone ?? "Chưa cập nhật số điện thoại";
+  const city = user?.address?.city;
+  const district = user?.address?.district;
+
   return (
     <>
       <View style={styles.topSpacer} />
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>H</Text>
-            <TouchableRipple style={styles.editButton} onPress={() => {}}>
-              <Text style={styles.editText}>Chỉnh sửa</Text>
-            </TouchableRipple>
+            <Text style={styles.avatarText}>{initials}</Text>
           </View>
           <View style={styles.userInfo}>
-            <Text style={styles.name}>Hoàng Phạm Tăng</Text>
-            <Button
-              mode="contained"
-              buttonColor={finalColors.accent}
-              textColor="#000"
-              style={styles.shopButton}
-              labelStyle={{ fontWeight: "700", fontSize: 12 }}
-              onPress={() => {}}
-            >
-              XEM SHOP
-            </Button>
+            <Text style={styles.name}>{fullName}</Text>
+            <Text style={styles.email}>{email}</Text>
+            <Text style={styles.phone}>{phone}</Text>
+            {(city || district) && (
+              <Text style={styles.location}>
+                {[district, city].filter(Boolean).join(", ")}
+              </Text>
+            )}
           </View>
         </View>
-        <TouchableRipple style={styles.settingsIcon} onPress={() => {}}>
-          <Text style={styles.editText}>Chỉnh sửa</Text>
-        </TouchableRipple>
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{user?.trustScore ?? 0}% tin cậy</Text>
+        </View>
       </View>
     </>
   );
@@ -73,33 +82,24 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   avatarText: { fontSize: 28, fontWeight: "bold", color: finalColors.background },
-  editButton: {
-    position: "absolute",
-    bottom: -4,
-    right: -8,
-    backgroundColor: finalColors.border,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: finalColors.textSecondary,
-  },
-  editText: {
-    color: finalColors.text,
-    fontSize: 10,
-  },
   userInfo: {
     justifyContent: "center",
   },
-  name: { color: finalColors.text, fontSize: 20, fontWeight: "600" },
-  shopButton: {
-    marginTop: 8,
-    borderRadius: 10,
-    paddingVertical: 0,
+  name: { color: finalColors.text, fontSize: 20, fontWeight: "600", marginBottom: 4 },
+  email: { color: finalColors.textSecondary, fontSize: 14 },
+  phone: { color: finalColors.textSecondary, fontSize: 14 },
+  location: { color: finalColors.textSecondary, fontSize: 13, marginTop: 2 },
+  badge: {
     paddingHorizontal: 12,
-    alignSelf: "flex-start",
+    paddingVertical: 6,
+    backgroundColor: finalColors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: finalColors.border,
   },
-  settingsIcon: {
-    opacity: 0,
+  badgeText: {
+    color: finalColors.primary,
+    fontSize: 12,
+    fontWeight: "600",
   },
 });

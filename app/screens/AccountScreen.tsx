@@ -1,63 +1,60 @@
-import React, { useState } from "react";
-import { ScrollView, StyleSheet, View, TouchableOpacity, Text } from "react-native";
-// IMPORT TẤT CẢ CÁC COMPONENT CON
+import React, { useCallback } from "react";
+import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import ProfileHeader from "../components/account/ProfileHeader";
 import StatsBalanceSection from "../components/account/StatBalanceSection";
-import MenuOptionList from "../components/account/MenuOptionList";
-import { useNavigation } from "@react-navigation/native";
+import MenuOptionList, { type OptionItem } from "../components/account/MenuOptionList";
+import colors from "../config/color";
+import { useAuth } from "../context/AuthContext";
 
-import colors from "../config/color"; // Import màu gốc
-
-// Khai báo thêm màu phụ cho style của screen chính
 const finalColors = {
-    ...colors,
-    warning: "#FF9800", 
-    contact: "#00FFFF",
+  ...colors,
+  warning: "#FF9800",
+  contact: "#00FFFF",
 };
 
-// Ánh xạ icon cho dữ liệu
-const iconMap = {
-    clock: "timer-sand", send: "truck-fast", loader: "progress-alert", user: "account",
-    "dollar-sign": "wallet", info: "store-cog", "book-open": "book-open-page-variant",
-    "help-circle": "help-circle-outline", shield: "shield-check-outline", trello: "sitemap",
-    "edit-3": "alert-circle", "phone-call": "eye-circle", "check-circle": "account-check",
-    settings: "cog", "log-out": "logout", "chevron-right": "chevron-right", zap: "lightning-bolt",
-};
-const mapIcon = (featherIconName: keyof typeof iconMap): string => {
-    return iconMap[featherIconName] || "circle-outline";
-};
-
-// Dữ liệu Menu Lists (Cần định nghĩa ở đây vì MenuOptionList là component tái sử dụng)
-const optionList1 = [
-    { label: "Thông tin Shop", icon: mapIcon("info"), value: "https://oreka.vn/store/d1...", isSeller: true },
-];
-const optionList2 = [
-    { label: "Điều khoản và Hướng dẫn", icon: mapIcon("book-open") },
-    { label: "Câu hỏi thường gặp", icon: mapIcon("help-circle") },
-    { label: "Đảm bảo cho người bán", icon: mapIcon("shield") },
-    { label: "Quy tắc hoạt động", icon: mapIcon("trello") },
-    { label: "Đóng góp ý kiến", icon: mapIcon("edit-3"), isWarning: true },
-];
-const optionList3 = [
-    { label: "Xác minh danh tính", icon: mapIcon("check-circle"), rightText: "Chỉ còn 2 bước", isVerification: true },
-    { label: "Hồ sơ của tôi", icon: mapIcon("user") },
-    { label: "Thiết lập", icon: mapIcon("settings") },
-    { label: "Đăng xuất", icon: mapIcon("log-out") },
+const accountOptions: OptionItem[] = [
+  { label: "Thông tin cá nhân", icon: "account-circle-outline", action: "profile" },
+  { label: "Địa chỉ giao dịch", icon: "map-marker-radius", action: "address" },
+  { label: "Đăng xuất", icon: "logout", action: "logout", isWarning: true },
 ];
 
+const supportOptions: OptionItem[] = [
+  { label: "Trung tâm hỗ trợ", icon: "headset", action: "support" },
+  { label: "Điều khoản sử dụng", icon: "file-document-outline", action: "terms" },
+];
 
 export default function AccountScreen() {
-  const [activeTab, setActiveTab] = useState<"BUY" | "SELL">("BUY");
-  const navigation = useNavigation<any>();
+  const { user, logout } = useAuth();
+
+  const handleOptionPress = useCallback(
+    (item: OptionItem) => {
+      if (item.action === "logout") {
+        Alert.alert("Đăng xuất", "Bạn chắc chắn muốn đăng xuất?", [
+          { text: "Hủy", style: "cancel" },
+          {
+            text: "Đăng xuất",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await logout();
+              } catch (error) {
+                console.error("Logout failed", error);
+              }
+            },
+          },
+        ]);
+        return;
+      }
+
+      Alert.alert(item.label, "Tính năng sẽ sớm được cập nhật.");
+    },
+    [logout]
+  );
 
   return (
     <ScrollView style={styles.container}>
-      {/* 1. Header */}
-      <ProfileHeader />
-
-      {/* 2. Stats & Balance */}
-      <StatsBalanceSection />
-
+      <ProfileHeader user={user} />
+      <StatsBalanceSection user={user} />
 {/* --Phúc Vinh-- */}
 
       {/* Nút chuyển sang trang Đơn bán hàng */}
@@ -86,22 +83,19 @@ export default function AccountScreen() {
 
 {/* --End Phúc Vinh-- */}
 
-      {/* 4. Option Lists */}
-      <MenuOptionList list={optionList1} />
-      <MenuOptionList title="Trung tâm hỗ trợ" list={optionList2} />
-      <MenuOptionList title="Tài khoản" list={optionList3} />
+      <MenuOptionList title="Tài khoản" list={accountOptions} onPressItem={handleOptionPress} />
+      <MenuOptionList title="Hỗ trợ" list={supportOptions} onPressItem={handleOptionPress} />
 
-      {/* Add some padding at the bottom */}
       <View style={styles.bottomSpacer} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: finalColors.background, 
-    padding: 8 
+  container: {
+    flex: 1,
+    backgroundColor: finalColors.background,
+    padding: 8,
   },
   sellerOrdersButton: {
     marginHorizontal: 12,

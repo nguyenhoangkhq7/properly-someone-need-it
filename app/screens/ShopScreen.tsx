@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -10,13 +10,23 @@ import {
   Dimensions,
   ImageBackground,
   FlatList,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  TextInput,
 } from "react-native";
 import colors from "../config/color";
 import Icon from "react-native-vector-icons/Ionicons";
 import MaterialIcon from "react-native-vector-icons/MaterialCommunityIcons";
 import { RouteProp, useNavigation } from "@react-navigation/native";
 import ProductItem from "../components/ProductItem"; // component dùng chung
-import ReviewCard from "../components/ReviewCard";
+import { useAuth } from "../context/AuthContext";
+import {
+  createShopReview,
+  fetchShopReviews,
+  type ShopReview,
+  type ReviewStats,
+} from "../api/reviewApi";
 import type { HomeStackParamList } from "../navigator/HomeNavigator";
 import type { Item } from "../types/Item";
 import { productApi } from "../api/productApi";
@@ -42,79 +52,200 @@ const OutlineButton = ({
   </TouchableOpacity>
 );
 
-// Component Rating Bar
-const RatingBar = ({
-  label,
-  percentage,
-  count,
-}: {
-  label: string;
-  percentage: number | `${number}%`;
-  count: number;
-}) => (
-  <View style={styles.ratingBarRow}>
-    <Text style={styles.ratingBarLabel}>{label}</Text>
-    <View style={styles.progressBarBg}>
-      <View
-        style={[
-          styles.progressBarFg,
-          { width: percentage, backgroundColor: STAR_COLOR },
-        ]}
-      />
-    </View>
-    <Text style={styles.ratingBarCount}>({count})</Text>
-  </View>
-);
-
 export default function ShopScreen({ route }: Props) {
-  const { shop } = route.params; // nhận shop từ props
+  const { shop } = route.params;
   const navigation = useNavigation<any>();
-  const [items, setItems] = useState<Item[]>([]);
+  const { accessToken } = useAuth();
+
+  const sellerId =
+    shop?.ownerId ?? shop?.sellerId ?? shop?._id ?? shop?.id ?? null;
+
+  const [reviews, setReviews] = useState<ShopReview[]>([]);
+  const [stats, setStats] = useState<ReviewStats>({ total: 0, averageRating: 0 });
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [reviewsError, setReviewsError] = useState<string | null>(null);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [ratingInput, setRatingInput] = useState(5);
+  const [commentInput, setCommentInput] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const averageRatingLabel = useMemo(() => {
+    return stats.averageRating ? stats.averageRating.toFixed(1) : "0.0";
+  }, [stats.averageRating]);
+
+  const loadReviews = useCallback(async () => {
+    if (!sellerId) {
+      setReviews([]);
+      setStats({ total: 0, averageRating: 0 });
+      setReviewsError("Chưa xác định được người bán để xem đánh giá.");
+      return;
+    }
+
+    setLoadingReviews(true);
+    try {
+      const response = await fetchShopReviews(sellerId);
+      setReviews(response.reviews);
+      setStats(response.stats);
+      setReviewsError(null);
+    } catch (error) {
+      setReviewsError((error as Error).message || "Không thể tải đánh giá");
+    } finally {
+      setLoadingReviews(false);
+    }
+  }, [sellerId]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const data = await productApi.getAll();
-        setItems(data.slice(0, 10));
-      } catch (e) {
-        setItems([]);
-      }
-    })();
+    loadReviews();
+  }, [loadReviews]);
+
+  const handleOpenReviewModal = useCallback(() => {
+    if (!sellerId) {
+      Alert.alert("Không hợp lệ", "Không xác định được người bán để đánh giá");
+      return;
+    }
+    setIsModalVisible(true);
+  }, [sellerId]);
+
+  const handleSubmitReview = useCallback(async () => {
+    if (!sellerId) {
+      Alert.alert("Không hợp lệ", "Không xác định được người bán để đánh giá");
+      return;
+    }
+
+    if (!accessToken) {
+      Alert.alert("Cần đăng nhập", "Bạn cần đăng nhập để viết đánh giá");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const newReview = await createShopReview(
+        {
+          sellerId,
+          rating: ratingInput,
+          comment: commentInput.trim() || undefined,
+        },
+        accessToken
+      );
+
+      setReviews((prev) => [newReview, ...prev]);
+      setStats((prev) => {
+        const newTotal = prev.total + 1;
+        const sum = prev.averageRating * prev.total + ratingInput;
+        return { total: newTotal, averageRating: Number((sum / newTotal).toFixed(2)) };
+      });
+
+      setCommentInput("");
+      setRatingInput(5);
+      setIsModalVisible(false);
+    } catch (error) {
+      const message = (error as Error).message || "Không thể gửi đánh giá";
+      Alert.alert("Lỗi", message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [sellerId, accessToken, ratingInput, commentInput]);
+
+  const renderReviewItem = useCallback(({ item }: { item: ShopReview }) => {
+    const reviewerName = item.reviewerId?.fullName || "Người dùng";
+    const createdDate = new Date(item.createdAt);
+    const formattedDate = createdDate.toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+
+    return (
+      <View style={styles.reviewCard}>
+        <View style={styles.reviewHeader}>
+          <View style={styles.reviewAvatar}>
+            {item.reviewerId?.avatar ? (
+              <Image source={{ uri: item.reviewerId.avatar }} style={styles.reviewAvatarImage} />
+            ) : (
+              <Text style={styles.reviewAvatarText}>
+                {reviewerName.charAt(0).toUpperCase()}
+              </Text>
+            )}
+          </View>
+          <View style={styles.reviewHeaderInfo}>
+            <Text style={styles.reviewName}>{reviewerName}</Text>
+            <View style={styles.reviewStars}>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <Icon
+                  key={value}
+                  name={value <= item.rating ? "star" : "star-outline"}
+                  size={14}
+                  color={value <= item.rating ? STAR_COLOR : colors.textSecondary}
+                />
+              ))}
+            </View>
+          </View>
+          <Text style={styles.reviewDate}>{formattedDate}</Text>
+        </View>
+        {item.comment ? <Text style={styles.reviewComment}>{item.comment}</Text> : null}
+      </View>
+    );
   }, []);
+
+  const reviewList = useMemo(() => {
+    if (loadingReviews) {
+      return <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />;
+    }
+
+    if (reviewsError) {
+      return <Text style={styles.errorText}>{reviewsError}</Text>;
+    }
+
+    if (!reviews.length) {
+      return <Text style={styles.emptyText}>Chưa có đánh giá nào cho shop này.</Text>;
+    }
+
+    return (
+      <FlatList
+        data={reviews}
+        keyExtractor={(item) => item._id}
+        renderItem={renderReviewItem}
+        scrollEnabled={false}
+        ItemSeparatorComponent={() => <View style={styles.reviewDivider} />}
+      />
+    );
+  }, [loadingReviews, reviewsError, reviews, renderReviewItem]);
+
+  const ratingPicker = (
+    <View style={styles.ratingPicker}>
+      {[1, 2, 3, 4, 5].map((value) => (
+        <TouchableOpacity key={value} onPress={() => setRatingInput(value)}>
+          <Icon
+            name={value <= ratingInput ? "star" : "star-outline"}
+            size={28}
+            color={value <= ratingInput ? STAR_COLOR : colors.textSecondary}
+          />
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
 
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="light-content" />
 
-      {/* Header với nút back */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.headerButton}
-          onPress={() => navigation.goBack()}
-        >
+        <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
           <Icon name="chevron-back" size={28} color={colors.text} />
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Ảnh bìa */}
         <ImageBackground
           source={{
-            uri:
-              shop.avatar ||
-              "https://placehold.co/600x250/11120F/F6FF00?text=Cover",
+            uri: shop.avatar || "https://placehold.co/600x250/11120F/F6FF00?text=Cover",
           }}
           style={styles.coverImage}
         />
 
-        {/* Nội dung chính */}
         <View style={styles.mainContent}>
-          {/* Thẻ thông tin shop */}
           <View style={styles.shopInfoCard}>
-            <Image
-              source={require("../../assets/peopple.jpg")}
-              style={styles.shopAvatar}
-            />
+            <Image source={require("../../assets/peopple.jpg")} style={styles.shopAvatar} />
             <Text style={styles.shopName}>{shop.name}</Text>
             <Text style={styles.shopStats}>
               {shop.totalProducts} Sản phẩm • {shop.sold} Đã bán
@@ -123,131 +254,129 @@ export default function ShopScreen({ route }: Props) {
               {[...Array(5)].map((_, i) => (
                 <Icon
                   key={i}
-                  name="star"
+                  name={i + 1 <= shop.rating ? "star" : "star-outline"}
                   size={16}
-                  color={i < shop.rating ? STAR_COLOR : colors.border}
+                  color={i + 1 <= shop.rating ? STAR_COLOR : colors.border}
                 />
               ))}
               <Text style={styles.shopRatingText}>({shop.rating}/5)</Text>
             </View>
           </View>
 
-          {/* Badges */}
           <View style={styles.badgeContainer}>
             <View style={styles.badge}>
-              <MaterialIcon
-                name="message-reply-text-outline"
-                size={24}
-                color={colors.textSecondary}
-              />
+              <MaterialIcon name="message-reply-text-outline" size={24} color={colors.textSecondary} />
               <Text style={styles.badgeText}>Phản hồi nhanh</Text>
             </View>
             <View style={styles.badge}>
-              <MaterialIcon
-                name="truck-fast-outline"
-                size={24}
-                color={colors.textSecondary}
-              />
+              <MaterialIcon name="truck-fast-outline" size={24} color={colors.textSecondary} />
               <Text style={styles.badgeText}>Gửi nhanh</Text>
             </View>
             <View style={styles.badge}>
-              <MaterialIcon 
-                name="shield-check-outline"
-                size={24}
-                color={colors.textSecondary}
-              />
+              <MaterialIcon name="shield-check-outline" size={24} color={colors.textSecondary} />
               <Text style={styles.badgeText}>Đáng tin cậy</Text>
             </View>
           </View>
 
-          <OutlineButton onPress={()=> navigation.navigate("HomeStack", {screen: "SearchResults"})} text={`XEM TẤT CẢ SẢN PHẨM (${shop.totalProducts})`} />
+          <OutlineButton
+            onPress={() => navigation.navigate("HomeStack", { screen: "SearchResults" })}
+            text={`XEM TẤT CẢ SẢN PHẨM (${shop.totalProducts})`}
+          />
         </View>
 
         <View style={styles.divider} />
 
-        {/* Về shop*/}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Về Tuấn Phú</Text>
           <Text style={styles.descriptionText}>
-            "Mình không muốn những món đồ còn giá trị phải nằm yên. Nếu nó có
-            thể phục vụ cho người khác, thì..."
+            "Mình không muốn những món đồ còn giá trị phải nằm yên. Nếu nó có thể phục vụ cho người khác, thì..."
           </Text>
         </View>
 
         <View style={styles.divider} />
 
-        {/* Đánh giá */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Đánh giá</Text>
-            <Text style={styles.totalRatingText}>Tổng cộng: 4</Text>
+            <TouchableOpacity onPress={handleOpenReviewModal}>
+              <Text style={styles.writeReviewText}>Viết đánh giá</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.overallRating}>
-            <Icon name="star" size={20} color={STAR_COLOR} />
-            <Text style={styles.overallRatingValue}>5.0</Text>
+          <View style={styles.ratingSummary}>
+            <View style={styles.ratingValueWrapper}>
+              <Text style={styles.ratingValue}>{averageRatingLabel}</Text>
+              <Text style={styles.ratingSuffix}>/5 sao</Text>
+            </View>
+            <Text style={styles.ratingCountText}>{stats.total} đánh giá</Text>
           </View>
-          <RatingBar label="5 sao" percentage="100%" count={4} />
-          <RatingBar label="4 sao" percentage="0%" count={0} />
-          <RatingBar label="3 sao" percentage="0%" count={0} />
-          <RatingBar label="2 sao" percentage="0%" count={0} />
-          <RatingBar label="1 sao" percentage="0%" count={0} />
-        </View>
-
-        {/* Danh sách đánh giá */}
-        <ReviewCard
-          avatar={require("../../assets/peopple.jpg")}
-          name="Gogo Book Store"
-          date="20/10/2025 21:00"
-          productImage={require("../../assets/laptop.jpg")}
-          productName="Laptop - Chín Mươi Ba"
-        />
-        <ReviewCard
-          avatar={require("../../assets/peopple.jpg")}
-          name="Toan Ho"
-          date="10/10/2025 15:00"
-          productImage={require("../../assets/laptop.jpg")}
-          productName="Laptop - Dốc hết trái tim"
-        />
-        <ReviewCard
-          avatar={require("../../assets/peopple.jpg")}
-          name="No Name"
-          date="07/10/2025 15:02"
-          productImage={require("../../assets/laptop.jpg")}
-          productName="Laptop"
-          reviewText="Khác hàng mới mỗi cái seal"
-          tags={["Giao hàng nhanh", "Giá cả phù hợp", "Người bán đáng tin cậy"]}
-        />
-
-        <View style={styles.section}>
-          <OutlineButton onPress={()=> navigation.navigate("AllRatingScreen")} text="TẤT CẢ ĐÁNH GIÁ" />
+          {reviewList}
         </View>
 
         <View style={styles.divider} />
 
-        {/* Sản phẩm từ người bán này */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Sản phẩm từ người bán này</Text>
-            <TouchableOpacity onPress={()=> navigation.navigate("HomeStack", {screen: "SearchResults"})}>
+            <TouchableOpacity onPress={() => navigation.navigate("HomeStack", { screen: "SearchResults" })}>
               <Text style={styles.seeAllText}>Xem tất cả</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.productGrid}>
             <FlatList
-              data={items}
-              renderItem={({ item }) => (
-                <ProductItem product={item} horizontal />
-              )}
-              keyExtractor={(item) => item._id}
+              data={trendingProducts}
+              renderItem={({ item }) => <ProductItem product={item} horizontal />}
+              keyExtractor={(item) => item.id}
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingLeft: 12 }}
             />
           </View>
-          <OutlineButton text="HIỂN THỊ THÊM" onPress={()=> navigation.navigate("HomeStack", {screen: "SearchResults"})}/>
+          <OutlineButton
+            text="HIỂN THỊ THÊM"
+            onPress={() => navigation.navigate("HomeStack", { screen: "SearchResults" })}
+          />
         </View>
         <View style={{ height: 50 }} />
       </ScrollView>
+
+      <Modal visible={isModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Viết đánh giá</Text>
+            {ratingPicker}
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Chia sẻ trải nghiệm của bạn"
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              value={commentInput}
+              onChangeText={setCommentInput}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonSecondary]}
+                onPress={() => {
+                  setIsModalVisible(false);
+                  setCommentInput("");
+                  setRatingInput(5);
+                }}
+                disabled={isSubmitting}
+              >
+                <Text style={styles.modalButtonText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonPrimary]}
+                onPress={handleSubmitReview}
+                disabled={isSubmitting}
+              >
+                <Text style={[styles.modalButtonText, styles.modalButtonTextPrimary]}>
+                  {isSubmitting ? "Đang gửi..." : "Gửi đánh giá"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -389,48 +518,156 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 14,
   },
-  // Đánh giá
-  totalRatingText: {
+  // Đánh giá động
+  writeReviewText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  ratingSummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  ratingValueWrapper: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+  },
+  ratingValue: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: colors.text,
+  },
+  ratingSuffix: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginLeft: 4,
+  },
+  ratingCountText: {
     color: colors.textSecondary,
     fontSize: 14,
   },
-  overallRating: {
+  ratingPicker: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginVertical: 12,
+  },
+  reviewCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 12,
+  },
+  reviewHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 10,
   },
-  overallRatingValue: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: "bold",
-    marginLeft: 8,
-  },
-  ratingBarRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 4,
-  },
-  ratingBarLabel: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    width: 50,
-  },
-  progressBarBg: {
-    flex: 1,
-    height: 6,
+  reviewAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.border,
-    borderRadius: 3,
-    marginHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+    overflow: "hidden",
   },
-  progressBarFg: {
-    height: 6,
-    borderRadius: 3,
+  reviewAvatarImage: {
+    width: 40,
+    height: 40,
   },
-  ratingBarCount: {
+  reviewAvatarText: {
+    color: colors.text,
+    fontWeight: "bold",
+  },
+  reviewHeaderInfo: {
+    flex: 1,
+  },
+  reviewName: {
+    color: colors.text,
+    fontWeight: "600",
+  },
+  reviewStars: {
+    flexDirection: "row",
+    marginTop: 4,
+  },
+  reviewDate: {
     color: colors.textSecondary,
-    fontSize: 13,
-    width: 30,
-    textAlign: "right",
+    fontSize: 12,
+  },
+  reviewComment: {
+    color: colors.text,
+    marginTop: 10,
+    lineHeight: 20,
+  },
+  reviewDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 12,
+  },
+  errorText: {
+    color: colors.accent,
+    textAlign: "center",
+  },
+  emptyText: {
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
+
+  // Modal viết review
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.text,
+    textAlign: "center",
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 12,
+    minHeight: 80,
+    color: colors.text,
+    marginTop: 8,
+    textAlignVertical: "top",
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 16,
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  modalButtonPrimary: {
+    backgroundColor: colors.primary,
+  },
+  modalButtonSecondary: {
+    backgroundColor: colors.border,
+  },
+  modalButtonText: {
+    color: colors.text,
+    fontWeight: "600",
+  },
+  modalButtonTextPrimary: {
+    color: colors.background,
   },
 
   // Lưới sản phẩm
