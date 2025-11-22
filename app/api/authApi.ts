@@ -6,6 +6,7 @@ export interface AccountProfile {
   email: string;
   phone: string;
   avatar: string | null;
+  role: "user" | "admin";
   address: {
     city: string | null;
     district: string | null;

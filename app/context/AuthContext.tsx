@@ -16,6 +16,7 @@ import { fetchCurrentUser, type AccountProfile } from "../api/authApi";
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
+  role?: "user" | "admin";
 }
 
 export type AuthUser = AccountProfile;
@@ -24,6 +25,7 @@ interface AuthContextType {
   accessToken: string | null;
   userToken: string | null;
   user: AuthUser | null;
+  role: "user" | "admin" | null;
   isLoading: boolean;
   login: (tokens: AuthTokens) => Promise<void>;
   logout: () => Promise<void>;
@@ -111,9 +113,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     );
   }
 
+  const role = user?.role ?? null;
+
   return (
     <AuthContext.Provider
-      value={{ accessToken, userToken: accessToken, user, isLoading, login, logout }}
+      value={{ accessToken, userToken: accessToken, user, role, isLoading, login, logout }}
     >
       {children}
     </AuthContext.Provider>

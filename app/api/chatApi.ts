@@ -35,22 +35,6 @@ export interface ChatMessage {
   isRead: boolean;
 }
 
-export interface TypingLogEntry {
-  userId: string;
-  action: "START" | "STOP";
-  timestamp: string;
-}
-
-export interface TypingCurrentEntry {
-  userId: string;
-  since: string;
-}
-
-export interface TypingLogSnapshot {
-  history: TypingLogEntry[];
-  current: TypingCurrentEntry[];
-}
-
 export const chatApi = {
   async getRooms(): Promise<ChatRoomSummary[]> {
     const response = await api.get<ApiResponse<ChatRoomSummary[]>>("/chat/rooms");
@@ -72,18 +56,6 @@ export const chatApi = {
   async markAsRead(roomId: string) {
     const response = await api.patch<ApiResponse<{ roomId: string; unreadKey: "buyer" | "seller" }>>(
       `/chat/rooms/${roomId}/read`
-    );
-    return response.data.data;
-  },
-  async getTypingLogs(roomId: string): Promise<TypingLogSnapshot> {
-    const response = await api.get<ApiResponse<TypingLogSnapshot>>(
-      `/chat/rooms/${roomId}/typing-logs`
-    );
-    return response.data.data;
-  },
-  async clearTypingLogs(roomId: string) {
-    const response = await api.delete<ApiResponse<{ roomId: string }>>(
-      `/chat/rooms/${roomId}/typing-logs`
     );
     return response.data.data;
   },

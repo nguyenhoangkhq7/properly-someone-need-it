@@ -23,7 +23,7 @@ import {
 import { Ionicons, Feather } from "@expo/vector-icons"; // Thêm Feather cho icon gọi/gửi file
 import colors from "../config/color";
 import { useNavigation } from "@react-navigation/native";
-import { chatApi, type ChatMessage, type TypingLogEntry, type TypingCurrentEntry, type ChatRoomSummary } from "../api/chatApi";
+import { chatApi, type ChatMessage, type ChatRoomSummary } from "../api/chatApi";
 import { getChatSocket } from "../utils/chatSocket";
 import { useAuth } from "../context/AuthContext";
 
@@ -49,8 +49,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const chatSocket = useMemo(() => getChatSocket(accessToken ?? null), [accessToken]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(true);
-  const [typingHistory, setTypingHistory] = useState<TypingLogEntry[]>([]);
-  const [currentTyping, setCurrentTyping] = useState<TypingCurrentEntry[]>([]);
+  const [isPeerTyping, setIsPeerTyping] = useState(false);
   const [inputText, setInputText] = useState("");
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -107,21 +106,13 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     }
   }, [roomId]);
 
-  const loadTypingLogs = useCallback(async () => {
-    if (!roomId) return;
-    try {
-      const snapshot = await chatApi.getTypingLogs(roomId);
-      setTypingHistory(snapshot.history);
-      setCurrentTyping(snapshot.current);
-    } catch (error) {
-      console.error("Failed to load typing logs", error);
-    }
-  }, [roomId]);
-
   useEffect(() => {
     void loadMessages();
-    void loadTypingLogs();
-  }, [loadMessages, loadTypingLogs]);
+  }, [loadMessages]);
+
+  useEffect(() => {
+    setIsPeerTyping(false);
+  }, [roomId]);
 
   const markAsRead = useCallback(async () => {
     if (!roomId) return;
@@ -162,65 +153,26 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       roomId: string;
       userId: string;
       isTyping: boolean;
-      history?: TypingLogEntry[];
-      current?: TypingCurrentEntry[];
     }) => {
       if (payload.roomId !== roomId) return;
-      if (payload.history) {
-        setTypingHistory(payload.history);
+      if (payload.userId === room?.peer?.id) {
+        setIsPeerTyping(payload.isTyping);
       }
-      if (payload.current) {
-        setCurrentTyping(payload.current);
-      }
-    };
-
-    const handleTypingCleared = ({ roomId: clearedId }: { roomId: string }) => {
-      if (clearedId !== roomId) return;
-      setTypingHistory([]);
-      setCurrentTyping([]);
     };
 
     chatSocket.on("message:new", handleNewMessage);
     chatSocket.on("typing:update", handleTypingUpdate);
-    chatSocket.on("typing:cleared", handleTypingCleared);
 
     return () => {
       chatSocket.off("message:new", handleNewMessage);
       chatSocket.off("typing:update", handleTypingUpdate);
-      chatSocket.off("typing:cleared", handleTypingCleared);
     };
-  }, [appendMessage, chatSocket, markAsRead, roomId, user?.id]);
+  }, [appendMessage, chatSocket, markAsRead, room?.peer?.id, roomId, user?.id]);
 
   useEffect(() => {
     const cleanup = handleSocketEvents();
     return cleanup;
   }, [handleSocketEvents]);
-
-  const resolveUserLabel = useCallback(
-    (userId: string) => {
-      if (user?.id === userId) {
-        return "Bạn";
-      }
-      if (room?.peer?.id === userId) {
-        return room.peer.name;
-      }
-      return "Người dùng";
-    },
-    [room?.peer?.id, room?.peer?.name, user?.id]
-  );
-
-  const handleClearTypingLogs = useCallback(async () => {
-    if (!roomId) return;
-    try {
-      await chatApi.clearTypingLogs(roomId);
-      setTypingHistory([]);
-      setCurrentTyping([]);
-      chatSocket?.emit("typing:clear", { roomId });
-    } catch (error) {
-      console.error("Failed to clear typing logs", error);
-      Alert.alert("Không thể xoá", "Vui lòng thử lại sau.");
-    }
-  }, [chatSocket, roomId]);
 
   const sendMessage = useCallback(() => {
     if (!roomId) return;
@@ -362,35 +314,11 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         />
       )}
 
-      <View style={styles.typingWrapper}>
-        {currentTyping.some((entry) => entry.userId === room?.peer?.id) && (
+      {isPeerTyping && (
+        <View style={styles.typingWrapper}>
           <Text style={styles.typingIndicator}>{room?.peer?.name} đang nhập...</Text>
-        )}
-
-        <View style={styles.typingHistoryHeader}>
-          <Text style={styles.typingHistoryTitle}>Lịch sử đang nhập</Text>
-          <TouchableOpacity onPress={() => void handleClearTypingLogs()}>
-            <Text style={styles.clearHistoryButton}>Xóa lịch sử</Text>
-          </TouchableOpacity>
         </View>
-        {typingHistory.length === 0 ? (
-          <Text style={styles.typingHistoryEmpty}>Chưa có hoạt động nhập.</Text>
-        ) : (
-          typingHistory
-            .slice()
-            .reverse()
-            .map((log, index) => (
-              <Text
-                style={styles.typingHistoryItem}
-                key={`${log.userId}-${log.timestamp}-${index}`}
-              >
-                {new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                {" - "}
-                {resolveUserLabel(log.userId)} {log.action === "START" ? "bắt đầu" : "dừng"} nhập.
-              </Text>
-            ))
-        )}
-      </View>
+      )}
 
       {/* Ô NHẬP TIN NHẮN */}
       <KeyboardAvoidingView
@@ -541,28 +469,5 @@ const styles = StyleSheet.create({
     typingIndicator: {
       color: finalColors.primary,
       fontWeight: "600",
-      marginBottom: 6,
-    },
-    typingHistoryHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 4,
-    },
-    typingHistoryTitle: {
-      color: finalColors.text,
-      fontWeight: "600",
-    },
-    clearHistoryButton: {
-      color: finalColors.primary,
-      fontWeight: "600",
-    },
-    typingHistoryEmpty: {
-      color: finalColors.muted,
-      fontSize: 13,
-    },
-    typingHistoryItem: {
-      color: finalColors.textSecondary,
-      fontSize: 13,
     },
 });
