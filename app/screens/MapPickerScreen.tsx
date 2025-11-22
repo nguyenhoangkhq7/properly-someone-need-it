@@ -10,7 +10,7 @@ import {
   TextInput,
   ScrollView,
 } from 'react-native';
-import MapView, { Marker, MapPressEvent, Region } from 'react-native-maps';
+import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { CameraStackParamList } from '../navigator/CameraNavigator';
@@ -84,16 +84,27 @@ const VIETNAM_PROVINCES = [
 
 type MapPickerRouteProp = RouteProp<CameraStackParamList, 'MapPickerScreen'>;
 
+type MapRegion = {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+};
+
+type MapPress = {
+  nativeEvent: { coordinate: { latitude: number; longitude: number } };
+};
+
 export default function MapPickerScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<MapPickerRouteProp>();
-  const mapRef = useRef<MapView | null>(null);
+  const mapRef = useRef<any>(null);
 
   const initialLat = route.params?.latitude;
   const initialLng = route.params?.longitude;
 
   const [loading, setLoading] = useState(true);
-  const [region, setRegion] = useState<Region | null>(null);
+  const [region, setRegion] = useState<MapRegion | null>(null);
   const [selectedCoord, setSelectedCoord] = useState<{ latitude: number; longitude: number } | null>(null);
   const [resolvingAddress, setResolvingAddress] = useState(false);
   const [province, setProvince] = useState<string>('TP. Hồ Chí Minh');
@@ -105,7 +116,7 @@ export default function MapPickerScreen() {
     const initLocation = async () => {
       try {
         if (initialLat && initialLng) {
-          const reg: Region = {
+          const reg: MapRegion = {
             latitude: initialLat,
             longitude: initialLng,
             latitudeDelta: 0.01,
@@ -123,7 +134,7 @@ export default function MapPickerScreen() {
             'Thông báo',
             'Không có quyền truy cập vị trí. Hãy chọn vị trí thủ công trên bản đồ.'
           );
-          const reg: Region = {
+          const reg: MapRegion = {
             latitude: 10.776389,
             longitude: 106.701139,
             latitudeDelta: 0.05,
@@ -136,7 +147,7 @@ export default function MapPickerScreen() {
         }
 
         const loc = await Location.getCurrentPositionAsync({});
-        const reg: Region = {
+        const reg: MapRegion = {
           latitude: loc.coords.latitude,
           longitude: loc.coords.longitude,
           latitudeDelta: 0.01,
@@ -145,7 +156,7 @@ export default function MapPickerScreen() {
         setRegion(reg);
         setSelectedCoord({ latitude: reg.latitude, longitude: reg.longitude });
       } catch (e) {
-        const reg: Region = {
+        const reg: MapRegion = {
           latitude: 10.776389,
           longitude: 106.701139,
           latitudeDelta: 0.05,
@@ -161,7 +172,7 @@ export default function MapPickerScreen() {
     initLocation();
   }, [initialLat, initialLng]);
 
-  const handleMapPress = (e: MapPressEvent) => {
+  const handleMapPress = (e: MapPress) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
     setSelectedCoord({ latitude, longitude });
   };
@@ -200,7 +211,7 @@ export default function MapPickerScreen() {
       const lat = parseFloat(first.lat);
       const lon = parseFloat(first.lon);
 
-      const newRegion: Region = {
+      const newRegion: MapRegion = {
         latitude: lat,
         longitude: lon,
         latitudeDelta: 0.01,

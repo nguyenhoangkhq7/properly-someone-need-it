@@ -10,7 +10,7 @@ import {
   ScrollView,
   ImageBackground,
 } from "react-native";
-import { CameraView, FlashMode, useCameraPermissions } from "expo-camera";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import Icon from "react-native-vector-icons/Ionicons";
 import FeatherIcon from "react-native-vector-icons/Feather";
 import MaterialIcon from "react-native-vector-icons/MaterialIcons";
@@ -22,6 +22,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 // @ts-ignore - installed via Expo
 import * as ImagePicker from "expo-image-picker";
 
+type FlashSetting = "on" | "off" | "auto" | "torch";
 
 // Component Checkbox tùy chỉnh vì CheckBox không phải là component cốt lõi
 const CustomCheckbox = ({
@@ -72,9 +73,10 @@ const PreviewItem = ({ active = false }: { active?: boolean }) => (
 
 export default function PostProductScreen() {
   const [permission, requestPermission] = useCameraPermissions();
-  const cameraRef = useRef<CameraView | null>(null);
+  const cameraRef = useRef<any>(null);
   const [facing, setFacing] = useState<"front" | "back">("back");
-  const [flash, setFlash] = useState<FlashMode>("off");
+  const [flash, setFlash] = useState<FlashSetting>("off");
+  const [cameraReady, setCameraReady] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const navigation = useNavigation<any>();
@@ -122,7 +124,10 @@ export default function PostProductScreen() {
         if (!result.granted) return;
       }
 
-      if (!cameraRef.current) return;
+      if (!cameraRef.current || !cameraReady) {
+        console.log("Camera not ready yet");
+        return;
+      }
 
       const photo = await cameraRef.current.takePictureAsync();
       if (!photo?.uri) return;
@@ -137,11 +142,11 @@ export default function PostProductScreen() {
   };
 
   const toggleFacing = () => {
-    setFacing((prev) => (prev === "back" ? "front" : "back"));
+    setFacing((prev: "front" | "back") => (prev === "back" ? "front" : "back"));
   };
 
   const toggleFlash = () => {
-    setFlash((prev) => (prev === "off" ? "on" : "off"));
+    setFlash((prev: FlashSetting) => (prev === "off" ? "on" : "off"));
   };
 
   const handlePickFromLibrary = async () => {
@@ -193,6 +198,11 @@ export default function PostProductScreen() {
           style={styles.cameraView}
           facing={facing}
           flash={flash}
+          onCameraReady={() => setCameraReady(true)}
+          onMountError={(e) => {
+            console.log("Camera mount error:", e);
+            setCameraReady(false);
+          }}
         >
           {/* Header */}
           <View style={styles.header}>

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -15,10 +15,11 @@ import colors from "../config/color";
 import Icon from "react-native-vector-icons/Ionicons";
 import MaterialIcon from "react-native-vector-icons/MaterialCommunityIcons";
 import { RouteProp, useNavigation } from "@react-navigation/native";
-import { trendingProducts } from "../data/products";
 import ProductItem from "../components/ProductItem"; // component dùng chung
 import ReviewCard from "../components/ReviewCard";
 import type { HomeStackParamList } from "../navigator/HomeNavigator";
+import type { Item } from "../types/Item";
+import { productApi } from "../api/productApi";
 
 const { width } = Dimensions.get("window");
 const PRODUCT_CARD_WIDTH = (width - 40) / 3 - 10;
@@ -68,6 +69,18 @@ const RatingBar = ({
 export default function ShopScreen({ route }: Props) {
   const { shop } = route.params; // nhận shop từ props
   const navigation = useNavigation<any>();
+  const [items, setItems] = useState<Item[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await productApi.getAll();
+        setItems(data.slice(0, 10));
+      } catch (e) {
+        setItems([]);
+      }
+    })();
+  }, []);
 
   return (
     <View style={styles.screen}>
@@ -221,11 +234,11 @@ export default function ShopScreen({ route }: Props) {
           </View>
           <View style={styles.productGrid}>
             <FlatList
-              data={trendingProducts}
+              data={items}
               renderItem={({ item }) => (
                 <ProductItem product={item} horizontal />
               )}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => item._id}
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingLeft: 12 }}

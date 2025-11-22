@@ -105,6 +105,7 @@ export default function ProductDetailScreen() {
     null
   );
   const [seller, setSeller] = useState<SellerInfo | null>(null);
+  const [isBuying, setIsBuying] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -528,7 +529,7 @@ export default function ProductDetailScreen() {
           <Text style={styles.footerButtonTextPrimary}>MUA NGAY</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -622,6 +623,46 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginRight: 8,
     flex: 1,
+  },
+  footer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderColor: colors.border,
+    gap: 10,
+  },
+  footerButtonSecondary: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  footerButtonTextSecondary: {
+    color: colors.primary,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  footerButtonPrimary: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  footerButtonTextPrimary: {
+    color: colors.background,
+    fontWeight: "800",
+    fontSize: 14,
   },
   ctaRow: {
     flexDirection: "row",

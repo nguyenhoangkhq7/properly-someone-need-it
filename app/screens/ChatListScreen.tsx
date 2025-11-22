@@ -18,7 +18,7 @@ interface ChatItem {
     avatar: string;
     lastMessage: string;
     time: string;
-    unreadCount?: number; 
+    unreadCount: number; 
 }
 
 const finalColors = {
@@ -40,37 +40,40 @@ export default function ChatListScreen() {
         unreadCount: index === 0 ? 3 : (index === 2 ? 1 : 0), 
     }));
 
-    const renderItem = ({ item }: { item: ChatItem }) => (
-        <TouchableOpacity
-            style={styles.chatItem}
-            onPress={() => navigation.navigate("ChatRoom", { chat: item })}
-        >
-            <Image source={{ uri: item.avatar }} style={styles.avatar} />
-            
-            <View style={styles.chatContent}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text 
-                    style={[
-                        styles.lastMessage, 
-                        // ✅ SỬA LỖI: Chỉ áp dụng styles.unreadLastMessage nếu count > 0
-                        item.unreadCount > 0 && styles.unreadLastMessage
-                    ]} 
-                    numberOfLines={1}
-                >
-                    {item.lastMessage}
-                </Text>
-            </View>
+    const renderItem = ({ item }: { item: ChatItem }) => {
+        const unread = item.unreadCount || 0;
+        return (
+            <TouchableOpacity
+                style={styles.chatItem}
+                onPress={() => navigation.navigate("ChatRoom", { chat: item })}
+            >
+                <Image source={{ uri: item.avatar }} style={styles.avatar} />
+                
+                <View style={styles.chatContent}>
+                    <Text style={styles.name}>{item.name}</Text>
+                    <Text 
+                        style={[
+                            styles.lastMessage, 
+                            // ✅ SỬA LỖI: Chỉ áp dụng styles.unreadLastMessage nếu count > 0
+                            unread > 0 && styles.unreadLastMessage
+                        ]} 
+                        numberOfLines={1}
+                    >
+                        {item.lastMessage}
+                    </Text>
+                </View>
 
-            <View style={styles.metaContainer}>
-                <Text style={styles.time}>{item.time}</Text>
-                {item.unreadCount > 0 && (
-                    <View style={styles.unreadBadge}>
-                        <Text style={styles.unreadCountText}>{item.unreadCount > 99 ? '99+' : item.unreadCount}</Text>
-                    </View>
-                )}
-            </View>
-        </TouchableOpacity>
-    );
+                <View style={styles.metaContainer}>
+                    <Text style={styles.time}>{item.time}</Text>
+                    {unread > 0 && (
+                        <View style={styles.unreadBadge}>
+                            <Text style={styles.unreadCountText}>{unread > 99 ? '99+' : unread}</Text>
+                        </View>
+                    )}
+                </View>
+            </TouchableOpacity>
+        );
+    };
 
     return (
         <View style={styles.container}>
