@@ -20,23 +20,22 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { Ionicons, Feather } from "@expo/vector-icons"; // Thêm Feather cho icon gọi/gửi file
+import { Ionicons, Feather } from "@expo/vector-icons";
 import colors from "../config/color";
 import { useNavigation } from "@react-navigation/native";
 import { chatApi, type ChatMessage, type ChatRoomSummary } from "../api/chatApi";
 import { getChatSocket } from "../utils/chatSocket";
 import { useAuth } from "../context/AuthContext";
 
-// Giả định màu sắc
 const finalColors = {
-    ...colors,
-    text: colors.text || "#FFFFFF",
-    textSecondary: colors.textSecondary || "#BDBDBD",
-    background: colors.background || "#0A0A0A",
-    surface: colors.surface || "#1F1F1F",
-    primary: colors.primary || "#007AFF",
-    muted: colors.muted || "#555555",
-    border: colors.border || "#232621",
+  ...colors,
+  text: colors.text || "#FFFFFF",
+  textSecondary: colors.textSecondary || "#BDBDBD",
+  background: colors.background || "#0A0A0A",
+  surface: colors.surface || "#1F1F1F",
+  primary: colors.primary || "#007AFF",
+  muted: colors.muted || "#555555",
+  border: colors.border || "#232621",
 };
 
 const TYPING_DEBOUNCE_MS = 500;
@@ -66,10 +65,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   }
 
   useLayoutEffect(() => {
-    // Ẩn bottom tab bar khi vào chat room
     navigation.getParent()?.setOptions({ tabBarStyle: { display: "none" } });
-
-    // Khôi phục lại khi thoát
     return () => {
       navigation.getParent()?.setOptions({ tabBarStyle: { display: "flex" } });
     };
@@ -133,7 +129,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     };
 
   const handleAttachFile = () => {
-      alert("Mở hộp thoại chọn File/Ảnh...");
+    alert("Mở chọn File/Ảnh...");
   };
 
   const handleSocketEvents = useCallback(() => {
@@ -259,8 +255,8 @@ export default function ChatRoomScreen({ route, navigation }: any) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={{height:30}}/>
-      {/* HEADER */}
+      <View style={{ height: 30 }} />
+
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={{ paddingRight: 8 }}>
           <Ionicons name="arrow-back" size={24} color={finalColors.text} />
@@ -271,14 +267,12 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         <Text style={styles.headerTitle} numberOfLines={1}>{room?.peer?.name}</Text>
         
         <View style={styles.headerActions}>
-            {/* Nút Gọi Video */}
-            <TouchableOpacity onPress={() => handleCall('video')} style={styles.actionButton}>
-                <Feather name="video" size={20} color={finalColors.primary} />
-            </TouchableOpacity>
-            {/* Nút Gọi Audio */}
-            <TouchableOpacity onPress={() => handleCall('audio')} style={styles.actionButton}>
-                <Feather name="phone" size={20} color={finalColors.primary} />
-            </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleCall("video")} style={styles.actionButton}>
+            <Feather name="video" size={20} color={finalColors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleCall("audio")} style={styles.actionButton}>
+            <Feather name="phone" size={20} color={finalColors.primary} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -320,17 +314,25 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         </View>
       )}
 
-      {/* Ô NHẬP TIN NHẮN */}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
         style={{ backgroundColor: finalColors.surface }}
       >
         <View style={styles.inputContainer}>
-            {/* Nút Gửi File/Ảnh */}
-            <TouchableOpacity onPress={handleAttachFile} style={styles.attachButton}>
-                <Feather name="plus-circle" size={24} color={finalColors.muted} />
-            </TouchableOpacity>
+          <TouchableOpacity onPress={handleAttachFile} style={styles.attachButton}>
+            <Feather name="plus-circle" size={24} color={finalColors.muted} />
+          </TouchableOpacity>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Nhập tin nhắn..."
+            placeholderTextColor={finalColors.muted}
+            value={inputText}
+            onChangeText={setInputText}
+            multiline={false}
+            onSubmitEditing={sendMessage}
+          />
 
             <TextInput
                 style={styles.input}

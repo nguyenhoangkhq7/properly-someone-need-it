@@ -55,6 +55,33 @@ export default function AccountScreen() {
     <ScrollView style={styles.container}>
       <ProfileHeader user={user} />
       <StatsBalanceSection user={user} />
+{/* --Phúc Vinh-- */}
+
+      {/* Nút chuyển sang trang Đơn bán hàng */}
+      <TouchableOpacity
+        style={styles.sellerOrdersButton}
+        onPress={() => navigation.navigate("SellerOrders")}
+      >
+        <Text style={styles.sellerOrdersText}>Đơn bán hàng</Text>
+      </TouchableOpacity>
+
+      {/* Nút chuyển sang trang Đơn mua hàng */}
+      <TouchableOpacity
+        style={styles.sellerOrdersButton}
+        onPress={() => navigation.navigate("BuyerOrders")}
+      >
+        <Text style={styles.sellerOrdersText}>Đơn mua hàng</Text>
+      </TouchableOpacity>
+
+      {/* Nút hiển thị danh sách sản phẩm đang bán */}
+      <TouchableOpacity
+        style={styles.sellerOrdersButton}
+        onPress={() => navigation.navigate("MySellingItems")}
+      >
+        <Text style={styles.sellerOrdersText}>Sản phẩm đang bán</Text>
+      </TouchableOpacity>
+
+{/* --End Phúc Vinh-- */}
 
       <MenuOptionList title="Tài khoản" list={accountOptions} onPressItem={handleOptionPress} />
       <MenuOptionList title="Hỗ trợ" list={supportOptions} onPressItem={handleOptionPress} />
@@ -69,6 +96,23 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: finalColors.background,
     padding: 8,
+  },
+  sellerOrdersButton: {
+    marginHorizontal: 12,
+    marginTop: 16,
+    marginBottom: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: finalColors.surface,
+    borderWidth: 1,
+    borderColor: finalColors.primary,
+  },
+  sellerOrdersText: {
+    color: finalColors.primary,
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
   },
   bottomSpacer: {
     height: 70,

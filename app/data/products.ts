@@ -6,7 +6,8 @@ export interface Product {
   price: string;
   originalPrice?: string;
   discount?: string;
-  image?: string;
+  image?: string; // legacy field for existing data
+  images?: string[]; // new field for multiple images when posting
   category: string;
 }
 
@@ -47,7 +48,7 @@ export const featuredProducts: Product[] = [
 ];
 
 // 🔹 Sản phẩm bán chạy (Trending)
-export const trendingProducts: Product[] = [
+export const nearByProducts: Product[] = [
   {
     id: "4",
     title: "Samsung Galaxy S23 Ultra 256GB",
@@ -77,7 +78,8 @@ export const trendingProducts: Product[] = [
     originalPrice: "8.200.000 đ",
     discount: "-17%",
     // Link ảnh mới: Màn hình
-    image: "https://th.bing.com/th?id=OIF.W5NaClkkMWZBbjxcD%2fqkqg&w=234&h=180&c=7&r=0&o=7&dpr=1.4&pid=1.7&rm=3",
+    image:
+      "https://th.bing.com/th?id=OIF.W5NaClkkMWZBbjxcD%2fqkqg&w=234&h=180&c=7&r=0&o=7&dpr=1.4&pid=1.7&rm=3",
     category: "Màn hình",
   },
 ];

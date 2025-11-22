@@ -19,7 +19,6 @@ import colors from "../config/color";
 import Icon from "react-native-vector-icons/Ionicons";
 import MaterialIcon from "react-native-vector-icons/MaterialCommunityIcons";
 import { RouteProp, useNavigation } from "@react-navigation/native";
-import { trendingProducts } from "../data/products";
 import ProductItem from "../components/ProductItem"; // component dùng chung
 import { useAuth } from "../context/AuthContext";
 import {
@@ -29,6 +28,8 @@ import {
   type ReviewStats,
 } from "../api/reviewApi";
 import type { HomeStackParamList } from "../navigator/HomeNavigator";
+import type { Item } from "../types/Item";
+import { productApi } from "../api/productApi";
 
 const { width } = Dimensions.get("window");
 const PRODUCT_CARD_WIDTH = (width - 40) / 3 - 10;

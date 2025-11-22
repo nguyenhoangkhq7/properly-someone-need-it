@@ -1,51 +1,160 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
   StatusBar,
-  Alert,
   ActivityIndicator,
   Modal,
 } from 'react-native';
 
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import colors from '../config/color';
-import { useNavigation } from '@react-navigation/native';
-
-// Định nghĩa kiểu cho state
-type PayerType = 'seller' | 'buyer';
+import { useNavigation, useRoute } from '@react-navigation/native';
 
 export default function ShippingDetailScreen() {
-  // State để quản lý ai là người trả phí vận chuyển
-  const [shippingPayer, setShippingPayer] = useState<PayerType>('buyer');
-
   // State cho Modal
   const [modalVisible, setModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  const navigation= useNavigation<any>();
+  const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+
+  const pickupAddressFromParams = (route.params as any)?.pickupAddress as string | undefined;
+  const productFromParams = (route.params as any)?.product;
+  const latitudeFromParams = (route.params as any)?.latitude as number | undefined;
+  const longitudeFromParams = (route.params as any)?.longitude as number | undefined;
+  const [pickupAddress, setPickupAddress] = useState<string>(
+    pickupAddressFromParams ?? 'Đang dùng vị trí hiện tại của bạn'
+  );
+
+  useEffect(() => {
+    if (pickupAddressFromParams) {
+      setPickupAddress(pickupAddressFromParams);
+    }
+  }, [pickupAddressFromParams]);
+
+  const uploadImageToCloudinary = async (uri: string): Promise<string> => {
+    const CLOUD_NAME = 'dxvkjwsj8';
+    const UPLOAD_PRESET = 'mobile';
+
+    const formData = new FormData();
+    formData.append('file', {
+      uri,
+      name: 'photo.jpg',
+      type: 'image/jpeg',
+    } as any);
+    formData.append('upload_preset', UPLOAD_PRESET);
+
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const text = await res.text();
+    console.log('Cloudinary response status', res.status, 'body', text);
+
+    if (!res.ok) {
+      throw new Error('Cloudinary upload failed');
+    }
+
+    const data = JSON.parse(text);
+    return data.secure_url as string;
+  };
+
+  const uploadAllImages = async (uris: string[]): Promise<string[]> => {
+    const uploaded: string[] = [];
+    for (const uri of uris) {
+      const url = await uploadImageToCloudinary(uri);
+      uploaded.push(url);
+    }
+    return uploaded;
+  };
+
+  const mapConditionToEnum = (c: string | null | undefined) => {
+    switch (c) {
+      case 'Mới':
+        return 'LIKE_NEW';
+      case 'Như mới':
+        return 'LIKE_NEW';
+      case 'Tốt':
+        return 'GOOD';
+      case 'Trung bình':
+        return 'FAIR';
+      case 'Kém':
+        return 'POOR';
+      default:
+        return 'GOOD';
+    }
+  };
 
   // Hàm xử lý khi nhấn nút "Đăng Bán"
-  const handlePost = () => {
-    // Hiển thị modal và bật trạng thái loading
+  const handlePost = async () => {
+    if (!productFromParams) {
+      console.warn('No product data passed to ShippingDetailScreen');
+      return;
+    }
+
+    const lat = latitudeFromParams;
+    const lng = longitudeFromParams;
+
+    if (typeof lat !== 'number' || typeof lng !== 'number') {
+      console.warn('No location coordinates provided for item');
+      return;
+    }
+
     setModalVisible(true);
     setIsLoading(true);
     setIsSuccess(false);
 
-    // Giả lập một tiến trình xử lý (ví dụ: gọi API) mất 2 giây
-    setTimeout(() => {
-      // Sau 2 giây, tắt loading và bật trạng thái thành công
+    try {
+      const localImages: string[] = productFromParams.images || [];
+      const imageUrls = await uploadAllImages(localImages);
+
+      const payload = {
+        sellerId: '691fcabea11a95c67d2e526a',
+        title: productFromParams.title,
+        description: productFromParams.description || 'Không có mô tả',
+        category: productFromParams.category,
+        subcategory: productFromParams.subcategory || undefined,
+        brand: productFromParams.brand || undefined,
+        modelName: productFromParams.modelName || undefined,
+        condition: mapConditionToEnum(productFromParams.condition),
+        price: productFromParams.price,
+        isNegotiable: productFromParams.isNegotiable ?? true,
+        images: imageUrls,
+        location: {
+          type: 'Point',
+          coordinates: [lng, lat],
+        },
+      };
+
+      console.log('Posting item payload:', payload);
+      const res = await fetch('http://192.168.1.10:3000/api/items', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.log('Create item failed:', res.status, errorText);
+        throw new Error('Failed to create item');
+      }
+
       setIsLoading(false);
       setIsSuccess(true);
-    }, 2000); // 2000ms = 2 giây
-
+    } catch (e) {
+      console.error(e);
+      setIsLoading(false);
+      setModalVisible(false);
+    }
   };
 
 
@@ -59,12 +168,12 @@ export default function ShippingDetailScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* Đặt màu thanh status bar cho phù hợp với header */}
-      <StatusBar barStyle="light-content" backgroundColor= {colors.accent}/>
+      <StatusBar barStyle="light-content" backgroundColor={colors.accent} />
 
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="chevron-back" size={28} color="#555" />
+          <Ionicons name="chevron-back" size={28} color="#555" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Điều kiện bán hàng</Text>
         <View style={{ width: 28 }} />
@@ -74,144 +183,34 @@ export default function ShippingDetailScreen() {
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        {/* Phần: Được gửi đi từ */}
+        {/* Phần: Địa điểm giao dịch / lấy hàng */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
             Được gửi đi từ <Text style={styles.requiredMark}>*</Text>
           </Text>
-          <Text style={styles.infoText}>Thông tin này là bắt buộc</Text>
-          <TouchableOpacity style={styles.linkButton}>
+          <Text style={styles.infoText}>{pickupAddress}</Text>
+          <TouchableOpacity
+            style={styles.linkButton}
+            onPress={() => {
+              const params = route.params as any;
+              const lat = params?.latitude as number | undefined;
+              const lng = params?.longitude as number | undefined;
+
+              navigation.navigate('MapPickerScreen', {
+                product: params?.product,
+                latitude: lat,
+                longitude: lng,
+              });
+            }}
+          >
             <Ionicons
               name="location-outline"
               size={18}
-              color="#64B5F6" // Màu link sáng hơn cho dark mode
+              color="#64B5F6"
               style={styles.linkIcon}
             />
             <Text style={styles.linkText}>Thay đổi địa chỉ lấy hàng</Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Phần: Trọng lượng */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Trọng lượng <Text style={styles.requiredMark}>*</Text>
-          </Text>
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.textInput}
-              placeholder="400"
-              keyboardType="numeric"
-              defaultValue="400"
-              placeholderTextColor="#777" // Thêm màu placeholder
-            />
-            <Text style={styles.unitText}>| Gr</Text>
-          </View>
-        </View>
-
-        {/* Phần: Kích thước */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Kích thước <Text style={styles.requiredMark}>*</Text>
-          </Text>
-          <View style={styles.dimensionsContainer}>
-            {/* Chiều dài */}
-            <View style={styles.dimensionInputBox}>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Chiều dài"
-                keyboardType="numeric"
-                defaultValue="30"
-                placeholderTextColor="#777" // Thêm màu placeholder
-              />
-              <Text style={styles.unitText}>| Cm</Text>
-            </View>
-            <Text style={styles.separator}>–</Text>
-            {/* Chiều rộng */}
-            <View style={styles.dimensionInputBox}>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Chiều rộng"
-                keyboardType="numeric"
-                defaultValue="20"
-                placeholderTextColor="#777" // Thêm màu placeholder
-              />
-              <Text style={styles.unitText}>| Cm</Text>
-            </View>
-            <Text style={styles.separator}>–</Text>
-            {/* Chiều cao */}
-            <View style={styles.dimensionInputBox}>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Chiều cao"
-                keyboardType="numeric"
-                defaultValue="8"
-                placeholderTextColor="#777" // Thêm màu placeholder
-              />
-              <Text style={styles.unitText}>| Cm</Text>
-            </View>
-          </View>
-
-          {/* Ví dụ hộp giày */}
-          <Text style={styles.exampleHintText}>Ví dụ như hộp giày</Text>
-          <View style={styles.imagePlaceholderContainer}>
-            {/* Placeholder cho hình ảnh cái hộp */}
-            <View style={styles.imagePlaceholder}>
-              <Text style={styles.placeholderBoxText}>Ảnh minh hoạ</Text>
-            </View>
-            {/* Chú thích kích thước bên cạnh */}
-            <View style={styles.exampleDimensions}>
-              <Text style={styles.exampleDimensionText}>Chiều dài: 33cm</Text>
-              <Text style={styles.exampleDimensionText}>Chiều rộng: 20cm</Text>
-              <Text style={styles.exampleDimensionText}>Chiều cao: 13cm</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Phần: Phí vận chuyển */}
-        <View style={styles.section}>
-          <View style={styles.shippingFeeHeader}>
-            <Text style={styles.sectionTitle}>Phí vận chuyển</Text>
-            <FontAwesome
-              name="info-circle"
-              size={18}
-              color="#888"
-              style={styles.infoIcon}
-            />
-          </View>
-
-          <View style={styles.radioGroup}>
-            {/* Option: Người bán trả */}
-            <TouchableOpacity
-              style={styles.radioOption}
-              onPress={() => setShippingPayer('seller')}>
-              <Ionicons
-                name={
-                  shippingPayer === 'seller'
-                    ? 'radio-button-on'
-                    : 'radio-button-off'
-                }
-                size={22}
-                color={shippingPayer === 'seller' ? '#64B5F6' : '#888'} // Màu xanh sáng hơn
-              />
-              <Text style={styles.radioLabel}>Người bán trả</Text>
-            </TouchableOpacity>
-
-            {/* Option: Người mua trả */}
-            <TouchableOpacity
-              style={styles.radioOption}
-              onPress={() => setShippingPayer('buyer')}>
-              <Ionicons
-                name={
-                  shippingPayer === 'buyer'
-                    ? 'radio-button-on'
-                    : 'radio-button-off'
-                }
-                size={22}
-                color={shippingPayer === 'buyer' ? '#64B5F6' : '#888'} // Màu xanh sáng hơn
-              />
-              <Text style={styles.radioLabel}>Người mua trả</Text>
-            </TouchableOpacity>
-          </View>
         </View>
       </ScrollView>
 
@@ -289,10 +288,10 @@ const styles = StyleSheet.create({
     borderBottomColor: '#222',
   },
   headerTitle: {
-      fontSize: 18,
-      fontWeight: '500',
-      color: colors.accent,
-    },
+    fontSize: 18,
+    fontWeight: '500',
+    color: colors.accent,
+  },
   section: {
     backgroundColor: '#242424', // Màu nền section tối
     padding: 16,
