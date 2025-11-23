@@ -38,6 +38,11 @@ export default (_ctx: ConfigContext): ExpoConfig => {
     extra: {
       ...(baseConfig.extra ?? {}),
       apiUrl,
+      cloudinary: {
+        cloudName: process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME,
+        uploadPreset: process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET,
+        folder: process.env.EXPO_PUBLIC_CLOUDINARY_FOLDER,
+      },
     },
   };
 };

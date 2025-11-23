@@ -32,6 +32,8 @@ import { apiClient } from "../api/apiWrapper";
 import { useAuth } from "../context/AuthContext";
 import { chatApi, type ChatRoomSummary } from "../api/chatApi";
 
+const API_URL ="http://192.168.1.10:3000/api";
+
 const { width } = Dimensions.get("window");
 
 type ProductDetailScreenRouteProp = RouteProp<
@@ -75,7 +77,7 @@ export default function ProductDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<ProductDetailScreenRouteProp>();
   const { product: initialProduct } = route.params;
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
 
   // State
   const [product, setProduct] = useState<ItemWithDistance>(initialProduct);
@@ -440,9 +442,21 @@ export default function ProductDetailScreen() {
 
             <TouchableOpacity
               style={styles.viewShopBtn}
-              onPress={() =>
-                navigation.navigate("ShopScreen", { shop: seller })
-              }
+              onPress={() => {
+                const fallbackSellerId = seller?._id ?? product.sellerId;
+                navigation.navigate("ShopScreen", {
+                  shop: {
+                    sellerId: fallbackSellerId,
+                    ownerId: seller?._id ?? product.sellerId,
+                    avatar: seller?.avatar,
+                    name: seller?.fullName ?? "Người bán",
+                    rating: seller?.rating ?? 5,
+                    totalProducts: related.length || 0,
+                    sold: seller?.successfulTrades ?? 0,
+                    reviewCount: seller?.reviewCount ?? 0,
+                  },
+                });
+              }}
             >
               <Text style={styles.viewShopText}>Xem Shop</Text>
             </TouchableOpacity>

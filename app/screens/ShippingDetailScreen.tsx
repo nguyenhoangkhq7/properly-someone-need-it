@@ -14,15 +14,18 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import colors from '../config/color';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useAuth } from '../context/AuthContext';
+
+const API_URL = 'http://192.168.1.10:3000/api';
 
 export default function ShippingDetailScreen() {
-  // State cho Modal
   const [modalVisible, setModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const { user, accessToken } = useAuth();
 
   const pickupAddressFromParams = (route.params as any)?.pickupAddress as string | undefined;
   const productFromParams = (route.params as any)?.product;
@@ -92,7 +95,6 @@ export default function ShippingDetailScreen() {
     }
   };
 
-  // Hàm xử lý khi nhấn nút "Đăng Bán"
   const handlePost = async () => {
     if (!productFromParams) {
       console.warn('No product data passed to ShippingDetailScreen');
@@ -112,11 +114,18 @@ export default function ShippingDetailScreen() {
     setIsSuccess(false);
 
     try {
+      if (!accessToken) {
+        navigation.navigate('Auth', { screen: 'Login' });
+        setModalVisible(false);
+        setIsLoading(false);
+        return;
+      }
+
       const localImages: string[] = productFromParams.images || [];
       const imageUrls = await uploadAllImages(localImages);
 
       const payload = {
-        sellerId: '691fcabea11a95c67d2e526a',
+        sellerId: user?.id as string,
         title: productFromParams.title,
         description: productFromParams.description || 'Không có mô tả',
         category: productFromParams.category,
@@ -134,10 +143,11 @@ export default function ShippingDetailScreen() {
       };
 
       console.log('Posting item payload:', payload);
-      const res = await fetch('http://192.168.1.10:3000/api/items', {
+      const res = await fetch(`${API_URL}/items`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify(payload),
       });
@@ -145,32 +155,28 @@ export default function ShippingDetailScreen() {
       if (!res.ok) {
         const errorText = await res.text();
         console.log('Create item failed:', res.status, errorText);
-        throw new Error('Failed to create item');
+        throw new Error(`Failed to create item: ${res.status}`);
       }
 
       setIsLoading(false);
       setIsSuccess(true);
-    } catch (e) {
-      console.error(e);
+    } catch (err) {
+      console.error('Error posting item:', err);
       setIsLoading(false);
       setModalVisible(false);
     }
   };
 
-
-  // Hàm xử lý khi đóng modal (sau khi đã thành công)
   const handleModalClose = () => {
     setModalVisible(false);
-    console.log("Đã nhấn OK, chuẩn bị chuyển về Home...");
-    navigation.navigate("HomeStack");
+    console.log('Đã nhấn OK, chuẩn bị chuyển về Home...');
+    navigation.navigate('HomeStack');
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Đặt màu thanh status bar cho phù hợp với header */}
       <StatusBar barStyle="light-content" backgroundColor={colors.accent} />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={28} color="#555" />
@@ -182,8 +188,8 @@ export default function ShippingDetailScreen() {
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
-        {/* Phần: Địa điểm giao dịch / lấy hàng */}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
             Được gửi đi từ <Text style={styles.requiredMark}>*</Text>
@@ -203,32 +209,23 @@ export default function ShippingDetailScreen() {
               });
             }}
           >
-            <Ionicons
-              name="location-outline"
-              size={18}
-              color="#64B5F6"
-              style={styles.linkIcon}
-            />
+            <Ionicons name="location-outline" size={18} color="#64B5F6" style={styles.linkIcon} />
             <Text style={styles.linkText}>Thay đổi địa chỉ lấy hàng</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
 
-      {/* Footer Buttons */}
       <View style={styles.footer}>
         <TouchableOpacity style={[styles.footerButton, styles.postButton]} onPress={handlePost}>
           <Text style={styles.postButtonText}>ĐĂNG BÁN</Text>
         </TouchableOpacity>
       </View>
 
-
-      {/* modal */}
       <Modal
         animationType="fade"
         transparent={true}
         visible={modalVisible}
         onRequestClose={() => {
-          // Chỉ cho phép đóng khi không còn loading
           if (!isLoading) {
             setModalVisible(false);
           }
@@ -247,10 +244,7 @@ export default function ShippingDetailScreen() {
                 <Ionicons name="checkmark-circle" size={60} color="#4CAF50" />
                 <Text style={styles.modalTitle}>Thành công!</Text>
                 <Text style={styles.modalText}>Sản phẩm đã được đăng bán.</Text>
-                <TouchableOpacity
-                  style={[styles.button, styles.buttonClose]}
-                  onPress={handleModalClose}
-                >
+                <TouchableOpacity style={[styles.button, styles.buttonClose]} onPress={handleModalClose}>
                   <Text style={styles.textStyle}>OK</Text>
                 </TouchableOpacity>
               </>
@@ -260,10 +254,8 @@ export default function ShippingDetailScreen() {
       </Modal>
     </SafeAreaView>
   );
-};
+}
 
-// StyleSheet ở cuối file
-// Giữ nguyên StyleSheet.create, nhưng export nó để dùng ở trên
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
