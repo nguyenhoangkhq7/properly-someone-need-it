@@ -57,6 +57,7 @@ export default function BuyerOrdersScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<"ALL" | string>("ALL");
+  const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
   const fetchOrders = async () => {
     if (!user?.id) {
@@ -73,7 +74,7 @@ export default function BuyerOrdersScreen() {
           ? `?status=${encodeURIComponent(filterStatus)}`
           : "";
       const res = await fetch(
-        `http://192.168.1.10:3000/api/orders/buyer/${user.id}${query}`
+        `${API_URL}/orders/buyer/${user.id}${query}`
       );
       const text = await res.text();
       console.log("Get buyer orders", res.status, text);
