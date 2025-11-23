@@ -14,6 +14,7 @@ import Icon from "react-native-vector-icons/Ionicons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import colors from "../config/color";
 import { useAuth } from "../context/AuthContext";
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 interface Item {
   _id: string;
@@ -43,7 +44,7 @@ export default function MySellingItemsScreen() {
     try {
       setError(null);
       const res = await fetch(
-        `http://192.168.1.10:3000/api/items/seller/${user.id}`
+        `${API_URL}/items/seller/${user.id}`
       );
       const text = await res.text();
       console.log("Get my selling items", res.status, text);

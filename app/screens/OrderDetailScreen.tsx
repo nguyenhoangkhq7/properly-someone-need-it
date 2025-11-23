@@ -13,7 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/Ionicons";
 import colors from "../config/color";
 
-const API_URL="http://192.168.1.10:3000/api";
+const API_URL= process.env.EXPO_PUBLIC_API_URL;
 
 interface Order {
   _id: string;

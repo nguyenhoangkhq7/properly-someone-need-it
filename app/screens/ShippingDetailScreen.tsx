@@ -16,7 +16,7 @@ import colors from '../config/color';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 
-const API_URL = 'http://192.168.1.10:3000/api';
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export default function ShippingDetailScreen() {
   const [modalVisible, setModalVisible] = useState(false);

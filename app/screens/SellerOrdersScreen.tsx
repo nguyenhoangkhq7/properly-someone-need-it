@@ -14,6 +14,7 @@ import Icon from "react-native-vector-icons/Ionicons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import colors from "../config/color";
 import { useAuth } from "../context/AuthContext";
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 const statusLabelMap: Record<string, string> = {
   PENDING: "Chờ xác nhận",
@@ -73,7 +74,7 @@ export default function SellerOrdersScreen() {
           ? `?status=${encodeURIComponent(filterStatus)}`
           : "";
       const res = await fetch(
-        `http://192.168.1.10:3000/api/orders/seller/${user.id}${query}`
+        `${API_URL}/orders/seller/${user.id}${query}`
       );
       const text = await res.text();
       console.log("Get seller orders", res.status, text);
@@ -112,7 +113,7 @@ export default function SellerOrdersScreen() {
   const handleUpdateStatus = async (orderId: string, status: string) => {
     try {
       const res = await fetch(
-        `http://192.168.1.10:3000/api/orders/${orderId}/status`,
+        `${API_URL}/orders/${orderId}/status`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },

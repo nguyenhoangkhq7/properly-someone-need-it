@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/Ionicons";
 import colors from "../config/color";
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 interface Item {
   _id: string;
@@ -37,7 +38,7 @@ export default function MySellingItemDetailScreen() {
   const fetchItem = async () => {
     try {
       setError(null);
-      const res = await fetch(`http://192.168.1.10:3000/api/items/${itemId}`);
+      const res = await fetch(`${API_URL}/items/${itemId}`);
       const text = await res.text();
       console.log("Get my selling item detail", res.status, text);
 
@@ -92,7 +93,7 @@ export default function MySellingItemDetailScreen() {
     try {
       setUpdating(true);
       const res = await fetch(
-        `http://192.168.1.10:3000/api/items/${item._id}/status`,
+        `${API_URL}/items/${item._id}/status`,
         {
           method: "PATCH",
           headers: {

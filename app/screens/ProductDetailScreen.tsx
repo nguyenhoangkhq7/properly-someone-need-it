@@ -32,7 +32,7 @@ import { apiClient } from "../api/apiWrapper";
 import { useAuth } from "../context/AuthContext";
 import { chatApi, type ChatRoomSummary } from "../api/chatApi";
 
-const API_URL ="http://192.168.1.10:3000/api";
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 const { width } = Dimensions.get("window");
 
