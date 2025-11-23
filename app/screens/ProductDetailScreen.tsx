@@ -30,6 +30,7 @@ import {
 import { getUserLatLng, haversineKm, roundDistanceKm } from "../utils/distance";
 import { apiClient } from "../api/apiWrapper";
 import { useAuth } from "../context/AuthContext";
+import { chatApi, type ChatRoomSummary } from "../api/chatApi";
 
 const { width } = Dimensions.get("window");
 
@@ -221,19 +222,34 @@ export default function ProductDetailScreen() {
     [product.images]
   );
 
-  const handleMessagePress = (preset?: string) => {
+  const handleMessagePress = async (preset?: string) => {
     if (!user) {
       Alert.alert("Thông báo", "Vui lòng đăng nhập để chat với người bán");
       return;
     }
-    const chatPayload = {
-      name: seller?.fullName || "Người bán",
-      avatar: seller?.avatar || product.images[0],
-      roomId: product._id,
-    };
+
+    if (user.id === product.sellerId) {
+      Alert.alert("Thông báo", "Bạn không thể tự chat với chính mình");
+      return;
+    }
+
+    let room: ChatRoomSummary | null = null;
+    try {
+      room = await chatApi.initiateChat(product.sellerId);
+    } catch (error: any) {
+      const message =
+        error?.message ?? "Không mở được phòng chat, thử lại sau.";
+      Alert.alert("Không thể mở chat", message);
+      return;
+    }
+
+    // --- ĐOẠN CODE QUAN TRỌNG CẦN SỬA ---
+
+    // Sử dụng initial: false để chèn ChatList xuống dưới ChatRoom
     navigation.navigate("Chat", {
       screen: "ChatRoom",
-      params: { chat: chatPayload, prefillMessage: preset },
+      params: { room, prefillMessage: preset },
+      initial: false, // <--- THÊM DÒNG NÀY: Phép thuật nằm ở đây
     });
   };
 
