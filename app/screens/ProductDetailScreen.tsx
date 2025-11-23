@@ -89,6 +89,7 @@ export default function ProductDetailScreen() {
   );
 
   // 1. Fetch Product Detail & Seller
+  // 1. Fetch Product Detail & Seller
   useEffect(() => {
     let mounted = true;
 
@@ -105,13 +106,9 @@ export default function ProductDetailScreen() {
           });
 
         // 2. Lấy thông tin Người bán (SỬA LỖI Ở ĐÂY)
+        // CẬP NHẬT: Thêm "/profile" vào cuối đường dẫn cho khớp với API Backend
         const sellerPromise = apiClient
-          .get(`/users/${initialProduct.sellerId}`)
-          // Thêm ": any" vào res để TypeScript cho phép truy cập .data
-          .then((res: any) => {
-            // Logic: Backend có thể trả về { data: User } hoặc User trực tiếp
-            return res.data?.data || res.data;
-          })
+          .get<SellerInfo>(`/users/${initialProduct.sellerId}/profile`)
           .catch((err) => {
             console.warn("Lỗi lấy thông tin seller:", err);
             return null;
@@ -130,7 +127,6 @@ export default function ProductDetailScreen() {
           setProduct(freshProduct);
         }
 
-        // Ép kiểu sellerData về SellerInfo để dùng an toàn
         if (sellerData) {
           setSeller(sellerData as SellerInfo);
         }
