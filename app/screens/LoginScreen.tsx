@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleSheet,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
@@ -67,6 +68,7 @@ export default function LoginScreen() {
       setStep("otp");
       setCountdown(RESEND_COUNTDOWN);
       setAttemptsLeft(MAX_OTP_ATTEMPTS);
+      setOtp("");
       Alert.alert("OTP đã gửi", "Kiểm tra email để nhận mã OTP");
     } catch (error) {
       const err = error as ApiClientError;
@@ -110,6 +112,13 @@ export default function LoginScreen() {
   };
 
   const canResend = countdown === 0 && step === "otp";
+  const handleEditEmail = () => {
+    setStep("email");
+    setCountdown(0);
+    setAttemptsLeft(MAX_OTP_ATTEMPTS);
+    setOtp("");
+    setVerifyingOtp(false);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -122,29 +131,49 @@ export default function LoginScreen() {
             <View style={styles.formContainer}>
               <Text style={styles.title}>Đăng Nhập</Text>
 
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor={colors.muted}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-              />
+              {step === "email" ? (
+                <>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Email"
+                    placeholderTextColor={colors.muted}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoComplete="email"
+                  />
 
-              <TouchableOpacity
-                style={[styles.buttonPrimary, { marginTop: 16, opacity: sendingOtp ? 0.7 : 1 }]}
-                onPress={handleSendOtp}
-                disabled={sendingOtp}
-              >
-                <Text style={styles.buttonPrimaryText}>
-                  {sendingOtp ? "Đang gửi OTP..." : "Gửi OTP"}
-                </Text>
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.buttonPrimary, { marginTop: 16, opacity: sendingOtp ? 0.7 : 1 }]}
+                    onPress={handleSendOtp}
+                    disabled={sendingOtp}
+                  >
+                    <Text style={styles.buttonPrimaryText}>
+                      {sendingOtp ? "Đang gửi OTP..." : "Gửi OTP"}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <View style={{ marginTop: 16 }}>
+                  <View style={otpStyles.summaryCard}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={otpStyles.summaryLabel}>Email nhận OTP</Text>
+                      <Text style={otpStyles.summaryValue}>{email.trim()}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={otpStyles.summaryEditButton}
+                      onPress={handleEditEmail}
+                    >
+                      <Text style={otpStyles.summaryEditText}>Thay đổi</Text>
+                    </TouchableOpacity>
+                  </View>
 
-              {step === "otp" && (
-                <View style={{ marginTop: 24 }}>
+                  <Text style={otpStyles.otpHint}>
+                    Mã xác thực đã được gửi tới email của bạn. Nếu chưa thấy, hãy kiểm tra thư
+                    rác.
+                  </Text>
+
                   <TextInput
                     style={styles.input}
                     placeholder="Nhập mã OTP"
@@ -179,9 +208,7 @@ export default function LoginScreen() {
                         color: canResend ? colors.primary : colors.textSecondary,
                       }}
                     >
-                      {canResend
-                        ? "Gửi lại OTP"
-                        : `Gửi lại OTP sau ${countdown}s`}
+                      {canResend ? "Gửi lại OTP" : `Gửi lại OTP sau ${countdown}s`}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -202,3 +229,44 @@ export default function LoginScreen() {
     </SafeAreaView>
   );
 }
+
+const otpStyles = StyleSheet.create({
+  summaryCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 12,
+    gap: 12,
+  },
+  summaryLabel: {
+    color: colors.textSecondary,
+    fontSize: 13,
+  },
+  summaryValue: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 4,
+  },
+  summaryEditButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  summaryEditText: {
+    color: colors.primary,
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  otpHint: {
+    color: colors.textSecondary,
+    marginBottom: 12,
+    fontSize: 14,
+  },
+});

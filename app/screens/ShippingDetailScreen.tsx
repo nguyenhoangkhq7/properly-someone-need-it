@@ -134,7 +134,7 @@ export default function ShippingDetailScreen() {
       };
 
       console.log('Posting item payload:', payload);
-      const res = await fetch('http://192.168.1.10:3000/api/items', {
+      const res = await fetch('http://192.168.1.25:3000/api/items', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
