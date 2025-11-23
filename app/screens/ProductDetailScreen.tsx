@@ -32,6 +32,8 @@ import { apiClient } from "../api/apiWrapper";
 import { useAuth } from "../context/AuthContext";
 import { chatApi, type ChatRoomSummary } from "../api/chatApi";
 
+const API_URL ="http://192.168.1.10:3000/api";
+
 const { width } = Dimensions.get("window");
 
 type ProductDetailScreenRouteProp = RouteProp<
@@ -75,7 +77,7 @@ export default function ProductDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<ProductDetailScreenRouteProp>();
   const { product: initialProduct } = route.params;
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
 
   // State
   const [product, setProduct] = useState<ItemWithDistance>(initialProduct);
