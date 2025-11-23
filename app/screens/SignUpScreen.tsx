@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleSheet,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import colors from "../config/color";
@@ -77,6 +78,7 @@ export default function SignUpScreen() {
       setStep("otp");
       setCountdown(RESEND_COUNTDOWN);
       setAttemptsLeft(MAX_OTP_ATTEMPTS);
+        setOtp("");
       Alert.alert("OTP đã gửi", "Kiểm tra email để nhận mã OTP và hoàn tất đăng ký");
     } catch (error) {
       const err = error as ApiClientError;
@@ -122,6 +124,21 @@ export default function SignUpScreen() {
   };
 
   const canResend = countdown === 0 && step === "otp";
+  const handleEditProfile = () => {
+    setStep("profile");
+    setCountdown(0);
+    setAttemptsLeft(MAX_OTP_ATTEMPTS);
+    setOtp("");
+    setVerifyingOtp(false);
+  };
+
+  const summaryItems = [
+    { label: "Họ và tên", value: fullName.trim() },
+    { label: "Email", value: email.trim() },
+    { label: "Số điện thoại", value: phone.trim() },
+    { label: "Tỉnh/Thành phố", value: city.trim() },
+    { label: "Quận/Huyện", value: district.trim() },
+  ].filter((item) => item.value);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -134,58 +151,80 @@ export default function SignUpScreen() {
             <View style={styles.formContainer}>
               <Text style={styles.title}>Tạo Tài Khoản</Text>
 
-              <TextInput
-                style={styles.input}
-                placeholder="Họ và tên"
-                placeholderTextColor={colors.muted}
-                value={fullName}
-                onChangeText={setFullName}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor={colors.muted}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Số điện thoại"
-                placeholderTextColor={colors.muted}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Tỉnh/Thành phố"
-                placeholderTextColor={colors.muted}
-                value={city}
-                onChangeText={setCity}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Quận/Huyện (tuỳ chọn)"
-                placeholderTextColor={colors.muted}
-                value={district}
-                onChangeText={setDistrict}
-              />
+              {step === "profile" ? (
+                <>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Họ và tên"
+                    placeholderTextColor={colors.muted}
+                    value={fullName}
+                    onChangeText={setFullName}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Email"
+                    placeholderTextColor={colors.muted}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoComplete="email"
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Số điện thoại"
+                    placeholderTextColor={colors.muted}
+                    value={phone}
+                    onChangeText={setPhone}
+                    keyboardType="phone-pad"
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Tỉnh/Thành phố"
+                    placeholderTextColor={colors.muted}
+                    value={city}
+                    onChangeText={setCity}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Quận/Huyện (tuỳ chọn)"
+                    placeholderTextColor={colors.muted}
+                    value={district}
+                    onChangeText={setDistrict}
+                  />
 
-              <TouchableOpacity
-                style={[styles.buttonPrimary, { marginTop: 16, opacity: sendingOtp ? 0.7 : 1 }]}
-                onPress={handleSendOtp}
-                disabled={sendingOtp}
-              >
-                <Text style={styles.buttonPrimaryText}>
-                  {sendingOtp ? "Đang gửi OTP..." : "Gửi OTP"}
-                </Text>
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.buttonPrimary, { marginTop: 16, opacity: sendingOtp ? 0.7 : 1 }]}
+                    onPress={handleSendOtp}
+                    disabled={sendingOtp}
+                  >
+                    <Text style={styles.buttonPrimaryText}>
+                      {sendingOtp ? "Đang gửi OTP..." : "Gửi OTP"}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <View style={{ marginTop: 16 }}>
+                  <View style={signUpOtpStyles.summaryCard}>
+                    {summaryItems.map((item) => (
+                      <View key={item.label} style={signUpOtpStyles.summaryRow}>
+                        <Text style={signUpOtpStyles.summaryLabel}>{item.label}</Text>
+                        <Text style={signUpOtpStyles.summaryValue}>{item.value}</Text>
+                      </View>
+                    ))}
+                  </View>
 
-              {step === "otp" && (
-                <View style={{ marginTop: 24 }}>
+                  <TouchableOpacity
+                    style={signUpOtpStyles.summaryEditButton}
+                    onPress={handleEditProfile}
+                  >
+                    <Text style={signUpOtpStyles.summaryEditText}>Chỉnh sửa thông tin</Text>
+                  </TouchableOpacity>
+
+                  <Text style={signUpOtpStyles.otpHint}>
+                    Mã xác thực đã gửi tới email trên. Vui lòng nhập chính xác để hoàn tất đăng ký.
+                  </Text>
+
                   <TextInput
                     style={styles.input}
                     placeholder="Nhập mã OTP"
@@ -243,3 +282,50 @@ export default function SignUpScreen() {
     </SafeAreaView>
   );
 }
+
+const signUpOtpStyles = StyleSheet.create({
+  summaryCard: {
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 12,
+    gap: 12,
+  },
+  summaryRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.04)",
+    paddingBottom: 8,
+  },
+  summaryLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  summaryValue: {
+    color: colors.text,
+    fontSize: 15,
+    marginTop: 2,
+    fontWeight: "600",
+  },
+  summaryEditButton: {
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    marginBottom: 12,
+  },
+  summaryEditText: {
+    color: colors.primary,
+    fontWeight: "600",
+  },
+  otpHint: {
+    color: colors.textSecondary,
+    marginBottom: 12,
+    fontSize: 14,
+  },
+});

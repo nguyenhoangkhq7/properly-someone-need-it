@@ -45,3 +45,6 @@ export interface Item {
   createdAt: string;
   updatedAt: string;
 }
+export type ItemWithDistance = Item & {
+  distanceKm?: number;
+};

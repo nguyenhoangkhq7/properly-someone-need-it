@@ -10,6 +10,10 @@ export interface AccountProfile {
   address: {
     city: string | null;
     district: string | null;
+    location?: {
+      type: "Point";
+      coordinates: [number, number];
+    } | null;
   };
   rating: number;
   reviewCount: number;

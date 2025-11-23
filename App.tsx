@@ -2,7 +2,6 @@
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { AuthProvider, useAuth } from "./app/context/AuthContext"; // <-- IMPORT 1
-import { UserProvider } from "./app/context/UserContext";
 import AppNavigator from "./app/navigator/AppNavigator";
 import AuthNavigator from "./app/navigator/AuthNavigator";
 import { StatusBar } from "react-native";
@@ -23,10 +22,8 @@ export default function App() {
   return (
     // BỌC TOÀN BỘ ỨNG DỤNG TRONG AUTH + USER PROVIDER
     <AuthProvider>
-      <UserProvider>
-        <StatusBar barStyle="light-content" backgroundColor={colors.background} />
-        <RootNavigator />
-      </UserProvider>
+      <StatusBar barStyle="light-content" backgroundColor={colors.background} />
+      <RootNavigator />
     </AuthProvider>
   );
 }

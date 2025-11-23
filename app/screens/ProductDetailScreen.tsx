@@ -10,10 +10,13 @@ import {
   StatusBar,
   Dimensions,
   FlatList,
-  SafeAreaView,
+  Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context"; // Dùng cái này thay cho View thường để tránh tai thỏ
 import { RouteProp, useRoute, useNavigation } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/Ionicons";
+import * as Location from "expo-location"; // Import trực tiếp, không dùng eval
+
 import colors from "../config/color";
 import ProductItem from "../components/ProductItem";
 import type { HomeStackParamList } from "../navigator/HomeNavigator";
@@ -24,9 +27,10 @@ import {
   getLocationLabel,
   getLocationLabelAsync,
 } from "../utils/locationLabel";
+import { getUserLatLng, haversineKm, roundDistanceKm } from "../utils/distance";
 import { apiClient } from "../api/apiWrapper";
 import { useAuth } from "../context/AuthContext";
-import type { ChatRoomSummary } from "../api/chatApi";
+import { chatApi, type ChatRoomSummary } from "../api/chatApi";
 
 const API_URL ="http://192.168.1.10:3000/api";
 
@@ -37,59 +41,36 @@ type ProductDetailScreenRouteProp = RouteProp<
   "ProductDetail"
 >;
 
+// Type mở rộng để hiển thị UI
 type ItemWithDistance = Item & { distanceKm?: number };
 type SellerInfo = {
   _id: string;
   fullName: string;
-  phone?: string;
   avatar?: string;
-  rating?: number;
-  reviewCount?: number;
-  successfulTrades?: number;
-  lastActiveAt?: string;
-  address?: { city?: string; district?: string };
+  rating: number; // Trong model là required, có default
+  reviewCount: number;
+  successfulTrades: number;
+  lastActiveAt: string; // JSON trả về string date
+  createdAt: string; // Ngày tham gia
+  isVerified: boolean; // Tích xanh
+  address: {
+    city: string;
+    district?: string;
+  };
 };
 
-const conditionLabel: Record<Item["condition"], string> = {
+// Map labels
+const CONDITION_MAP: Record<string, string> = {
   LIKE_NEW: "Như mới",
   GOOD: "Tốt",
   FAIR: "Ổn",
   POOR: "Cũ",
 };
-
-const statusLabel: Record<Item["status"], string> = {
+const STATUS_MAP: Record<string, string> = {
   ACTIVE: "Còn hàng",
-  PENDING: "Có người đang mua",
+  PENDING: "Đang giao dịch",
   SOLD: "Đã bán",
   DELETED: "Đã xóa",
-};
-
-const lazyRequire = (name: string) => {
-  try {
-    // eslint-disable-next-line no-eval
-    const req = eval("require");
-    return req(name);
-  } catch (_e) {
-    return null;
-  }
-};
-
-const fallbackCoords = { lat: 21.0285, lng: 105.8542 }; // Hanoi center fallback
-const haversineKm = (
-  a: { lat: number; lng: number },
-  b: { lat: number; lng: number }
-) => {
-  const toRad = (v: number) => (v * Math.PI) / 180;
-  const R = 6371;
-  const dLat = toRad(b.lat - a.lat);
-  const dLon = toRad(b.lng - a.lng);
-  const lat1 = toRad(a.lat);
-  const lat2 = toRad(b.lat);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  const c = 2 * Math.asin(Math.min(1, Math.sqrt(h)));
-  return R * c;
 };
 
 export default function ProductDetailScreen() {
@@ -98,250 +79,206 @@ export default function ProductDetailScreen() {
   const { product: initialProduct } = route.params;
   const { user, accessToken } = useAuth();
 
-  const [product, setProduct] = useState<ItemWithDistance | null>(
-    initialProduct as ItemWithDistance
-  );
+  // State
+  const [product, setProduct] = useState<ItemWithDistance>(initialProduct);
   const [related, setRelated] = useState<Item[]>([]);
-  const [savedItem, setSavedItem] = useState<SavedItem | null>(null);
-  const [distanceKm, setDistanceKm] = useState<number | null>(
-    (initialProduct as ItemWithDistance)?.distanceKm ?? null
-  );
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
-    null
-  );
   const [seller, setSeller] = useState<SellerInfo | null>(null);
-  const [isBuying, setIsBuying] = useState(false);
+  const [savedItem, setSavedItem] = useState<SavedItem | null>(null);
+  const [locationLabel, setLocationLabel] = useState(
+    getLocationLabel(initialProduct.location)
+  );
+  const [distance, setDistance] = useState<number | null>(
+    (initialProduct as any).distanceKm ?? null
+  );
 
+  // 1. Fetch Product Detail & Seller
+  // 1. Fetch Product Detail & Seller
   useEffect(() => {
     let mounted = true;
-    (async () => {
+
+    const loadData = async () => {
       try {
-        const fresh = await productApi.getById(initialProduct._id, user?.id);
-        if (mounted && fresh) setProduct(fresh);
+        // A. CHUẨN BỊ CÁC PROMISE
+
+        // 1. Lấy thông tin sản phẩm
+        const productPromise = productApi
+          .getById(initialProduct._id, user?.id)
+          .catch((err) => {
+            console.warn("Lỗi lấy chi tiết sản phẩm:", err);
+            return null;
+          });
+
+        // 2. Lấy thông tin Người bán (SỬA LỖI Ở ĐÂY)
+        // CẬP NHẬT: Thêm "/profile" vào cuối đường dẫn cho khớp với API Backend
+        const sellerPromise = apiClient
+          .get<SellerInfo>(`/users/${initialProduct.sellerId}/profile`)
+          .catch((err) => {
+            console.warn("Lỗi lấy thông tin seller:", err);
+            return null;
+          });
+
+        // B. THỰC THI
+        const [freshProduct, sellerData] = await Promise.all([
+          productPromise,
+          sellerPromise,
+        ]);
+
+        if (!mounted) return;
+
+        // C. CẬP NHẬT STATE
+        if (freshProduct) {
+          setProduct(freshProduct);
+        }
+
+        if (sellerData) {
+          setSeller(sellerData as SellerInfo);
+        }
+
+        // D. LẤY SẢN PHẨM KHÁC (RELATED)
+        const currentSellerId =
+          freshProduct?.sellerId || initialProduct.sellerId;
+
+        if (currentSellerId) {
+          try {
+            const allItems = await productApi.getAll();
+            const others = allItems
+              .filter(
+                (item) =>
+                  item.sellerId === currentSellerId &&
+                  item._id !== initialProduct._id &&
+                  item.status === "ACTIVE"
+              )
+              .sort(
+                (a, b) =>
+                  new Date(b.createdAt).getTime() -
+                  new Date(a.createdAt).getTime()
+              )
+              .slice(0, 6);
+
+            if (mounted) setRelated(others);
+          } catch (e) {
+            console.warn("Lỗi lấy sản phẩm liên quan:", e);
+          }
+        }
       } catch (e) {
-        // giữ nguyên dữ liệu khi lỗi
+        console.warn("Tổng hợp lỗi loadData:", e);
       }
-    })();
+    };
+
+    loadData();
+
     return () => {
       mounted = false;
     };
-  }, [initialProduct._id, user?.id]);
+  }, [initialProduct._id, initialProduct.sellerId, user?.id]);
 
-  const images = useMemo(
-    () => (product?.images?.length ? product.images : []),
-    [product]
-  );
-  const [locationLabel, setLocationLabel] = useState(
-    getLocationLabel(product?.location)
-  );
-  const coordKey = JSON.stringify(product?.location?.coordinates || []);
-
+  // 2. Logic Tính Khoảng Cách & Location Label (Tối ưu hóa)
   useEffect(() => {
-    let active = true;
-    (async () => {
-      const sellerId = product?.sellerId;
-      if (!sellerId) return;
-      try {
-        const info = await apiClient.get<SellerInfo>(`/users/${sellerId}`);
-        if (active) setSeller(info);
-      } catch (e) {
-        console.warn("seller fetch error", e);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [product?.sellerId]);
+    let mounted = true;
 
-  useEffect(() => {
-    let active = true;
-    getLocationLabelAsync(product?.location).then((label) => {
-      if (active) setLocationLabel(label);
-    });
-    return () => {
-      active = false;
-    };
-  }, [coordKey]);
-
-  const resolveLocation = async () => {
-    const Location = lazyRequire("expo-location");
-    if (!Location) return null;
-    try {
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (!perm || perm.status !== "granted") return null;
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
+    const calculateDistance = async () => {
+      // a. Lấy label địa chỉ chi tiết (Async)
+      getLocationLabelAsync(product.location).then((label) => {
+        if (mounted && label) setLocationLabel(label);
       });
-      return {
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-      };
-    } catch (_e) {
-      return null;
-    }
-  };
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      if (distanceKm != null) return;
-      const c = product?.location?.coordinates;
-      if (!c || c.length < 2) return;
-      const loc = coords || (await resolveLocation()) || fallbackCoords;
-      if (!coords) setCoords(loc);
-      const [lng, lat] = c;
-      const km = haversineKm(loc, { lat, lng });
-      if (active) setDistanceKm(Math.round(km * 10) / 10);
-    })();
+      // b. Tính khoảng cách
+      // Coordinates trong MongoDB/GeoJSON là [Longitude, Latitude]
+      const productCoords = product.location?.coordinates;
+      if (!productCoords || productCoords.length !== 2) return;
+      const [pLng, pLat] = productCoords;
+
+      // Ưu tiên 1: Vị trí set trong Profile user
+      let origin = getUserLatLng(user);
+
+      // Ưu tiên 2: GPS thực tế (nếu profile chưa set)
+      if (!origin) {
+        try {
+          const { status } = await Location.getForegroundPermissionsAsync();
+          if (status === "granted") {
+            const loc = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            });
+            origin = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+          }
+        } catch (e) {
+          /* Ignore GPS error */
+        }
+      }
+
+      if (origin && mounted) {
+        const km = haversineKm(origin, { lat: pLat, lng: pLng });
+        setDistance(roundDistanceKm(km));
+      }
+    };
+
+    calculateDistance();
     return () => {
-      active = false;
+      mounted = false;
     };
-  }, [coordKey, distanceKm, coords]);
+  }, [product.location, user]); // Dependency rõ ràng
 
-  const locationText =
-    distanceKm != null
-      ? `${locationLabel} - Khoảng cách ~${distanceKm} km`
-      : locationLabel;
+  // Helpers UI
+  const images = useMemo(
+    () => (product.images?.length ? product.images : []),
+    [product.images]
+  );
 
-  const handleMessagePress = (preset?: string) => {
-    const chatPayload = {
-      name: seller?.fullName || "Đang cập nhật",
-      avatar:
-        seller?.avatar || product?.images?.[0] || "https://picsum.photos/200",
-      roomId: product?._id || "",
-    };
+  const handleMessagePress = async (preset?: string) => {
+    if (!user) {
+      Alert.alert("Thông báo", "Vui lòng đăng nhập để chat với người bán");
+      return;
+    }
+
+    if (user.id === product.sellerId) {
+      Alert.alert("Thông báo", "Bạn không thể tự chat với chính mình");
+      return;
+    }
+
+    let room: ChatRoomSummary | null = null;
+    try {
+      room = await chatApi.initiateChat(product.sellerId);
+    } catch (error: any) {
+      const message =
+        error?.message ?? "Không mở được phòng chat, thử lại sau.";
+      Alert.alert("Không thể mở chat", message);
+      return;
+    }
+
+    // --- ĐOẠN CODE QUAN TRỌNG CẦN SỬA ---
+
+    // Sử dụng initial: false để chèn ChatList xuống dưới ChatRoom
     navigation.navigate("Chat", {
       screen: "ChatRoom",
-      params: { chat: chatPayload, prefillMessage: preset },
+      params: { room, prefillMessage: preset },
+      initial: false, // <--- THÊM DÒNG NÀY: Phép thuật nằm ở đây
     });
   };
 
   const handleToggleSave = () => {
-    if (savedItem) {
-      setSavedItem(null);
-    } else if (product) {
+    if (savedItem) setSavedItem(null); // Logic gọi API delete save ở đây
+    else
       setSavedItem({
         itemId: product._id,
         savedAt: new Date().toISOString(),
         title: product.title,
-      });
-    }
-  };
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      if (!product?.sellerId) return;
-      try {
-        const all = await productApi.getAll();
-        const others = all
-          .filter(
-            (item) =>
-              item.sellerId === product.sellerId && item._id !== product._id
-          )
-          .sort(
-            (a, b) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-        if (active) setRelated(others);
-      } catch (e) {
-        console.warn("related fetch error", e);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [product?._id, product?.sellerId]);
-
-  const formatLocation = () => {
-    if (seller?.address?.city || seller?.address?.district) {
-      return [seller?.address?.district, seller?.address?.city]
-        .filter(Boolean)
-        .join(", ");
-    }
-    return "Đang cập nhật";
-  };
-
-  const formatLastActive = () => {
-    if (!seller?.lastActiveAt) return "Hoạt động gần đây";
-    const last = new Date(seller.lastActiveAt);
-    return `Hoạt động: ${last.toLocaleDateString()}`;
-  };
-
-  const formatRating = () => {
-    if (seller?.rating != null) {
-      const base = `${seller.rating.toFixed(1)}/5`;
-      return seller.reviewCount
-        ? `${base} (${seller.reviewCount} đánh giá)`
-        : base;
-    }
-    return "Chưa có đánh giá";
-  };
-
-  const formatSuccessfulTrades = () => {
-    if (seller?.successfulTrades != null) {
-      return `${seller.successfulTrades} giao dịch thành công`;
-    }
-    return "Chưa có giao dịch";
-  };
-
-  // Hàm chọn mua ngay (Phúc Vinh)
-  const handleBuyNow = async () => {
-    try {
-      setIsBuying(true);
-
-      // Tạm thời dùng cứng một _id item thật trong Mongo để test mua hàng
-      const itemId = product?._id;
-
-      if (!accessToken) {
-        // Nếu chưa đăng nhập, chuyển tới màn Login
-        navigation.navigate("Auth", { screen: "Login" });
-        return;
-      }
-
-      const res = await fetch(`${API_URL}/orders`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ itemId }),
-      });
-      const data = await res.json();
-      console.log("Create order response", res.status, data);
-
-      if (!res.ok) {
-        return;
-      }
-
-      const order = data.order;
-      navigation.navigate("OrderDetail", {
-        orderId: order._id,
-      });
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsBuying(false);
-    }
+      }); // Logic gọi API save ở đây
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.surface} />
+    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
 
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
-          style={styles.headerButton}
+          style={styles.iconBtn}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="chevron-back" size={24} color={colors.text} />
+          <Icon name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={handleToggleSave}
-          >
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.iconBtn} onPress={handleToggleSave}>
             <Icon
               name={savedItem ? "heart" : "heart-outline"}
               size={24}
@@ -349,365 +286,469 @@ export default function ProductDetailScreen() {
             />
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.headerButton}
+            style={styles.iconBtn}
             onPress={() => handleMessagePress()}
           >
-            <Icon name="chatbubble-outline" size={24} color={colors.text} />
+            <Icon name="share-social-outline" size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Product Image */}
-        <View style={styles.imageContainer}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
+      >
+        {/* Image Carousel */}
+        <View style={styles.carouselContainer}>
           <FlatList
             data={images}
             horizontal
             pagingEnabled
-            keyExtractor={(uri, idx) => `${uri}-${idx}`}
             showsHorizontalScrollIndicator={false}
-            renderItem={({ item: uri }) => (
-              <Image source={{ uri }} style={styles.productImage} />
+            keyExtractor={(_, i) => i.toString()}
+            renderItem={({ item }) => (
+              <Image
+                source={{ uri: item }}
+                style={styles.mainImage}
+                resizeMode="cover"
+              />
             )}
             ListEmptyComponent={
-              <View style={styles.productImage}>
-                <Text style={styles.imageCounterText}>Không có ảnh</Text>
+              <View style={[styles.mainImage, styles.center]}>
+                <Text style={{ color: colors.textSecondary }}>Chưa có ảnh</Text>
               </View>
             }
           />
-          <View style={styles.imageCounter}>
-            <Text style={styles.imageCounterText}>
-              {`Hình ${images.length ? 1 : 0}/${images.length || 0}`}
-            </Text>
+          <View style={styles.imageBadge}>
+            <Text style={styles.imageBadgeText}>1/{images.length || 1}</Text>
           </View>
         </View>
 
-        {/* Product Info */}
+        {/* Main Info Section */}
         <View style={styles.section}>
-          <Text style={styles.productTitle}>{product?.title}</Text>
-          <Text style={styles.productPrice}>
-            {product ? `${product.price.toLocaleString()} đ` : ""}
-          </Text>
-          <View style={styles.detailRow}>
-            <Icon
-              name="location-outline"
-              size={16}
-              color={colors.textSecondary}
-              style={{ marginRight: 4 }}
-            />
-            <Text style={styles.detailValue}>{locationText}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Trạng thái:</Text>
-            <Text style={styles.detailValue}>
-              {product ? statusLabel[product.status] : ""}
-            </Text>
-          </View>
-          <View style={styles.ctaRow}>
-            <TouchableOpacity
-              style={[styles.ctaPrimary, styles.ctaSpacing]}
-              onPress={() =>
-                handleMessagePress(
-                  "Xin chào, mình muốn thương lượng giá sản phẩm này."
-                )
-              }
-            >
-              <Text style={styles.ctaPrimaryText}>Thương lượng</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.ctaPrimary}
-              onPress={() => handleBuyNow()}
-            >
-              <Text style={styles.ctaPrimaryText}>Mua ngay</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          <Text style={styles.title}>{product.title}</Text>
 
-        <View style={styles.divider} />
-
-        {/* Details */}
-        <View style={styles.section}>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Tình trạng:</Text>
-            <Text style={styles.detailValue}>
-              {product ? conditionLabel[product.condition] : ""}
-            </Text>
-            <Icon
-              name="information-circle-outline"
-              size={16}
-              color={colors.textSecondary}
-            />
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Danh mục:</Text>
-            <Text style={styles.detailValue}>{product?.category}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Thỏa thuận giá:</Text>
-            <Text style={styles.detailValue}>
-              {product?.isNegotiable ? "Có" : "Không"}
-            </Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Mô tả:</Text>
-          </View>
-          <Text style={styles.descriptionText}>{product?.description}</Text>
-        </View>
-
-        <View style={styles.divider} />
-
-        {/* Seller Info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Thông tin shop</Text>
-          <View style={styles.sellerInfo}>
-            <Image
-              source={
-                seller?.avatar
-                  ? { uri: seller.avatar }
-                  : require("../../assets/peopple.jpg")
-              }
-              style={styles.sellerAvatar}
-            />
-            <View style={styles.sellerDetails}>
-              <Text style={styles.sellerName}>
-                {seller?.fullName || "Đang cập nhật"}
-              </Text>
-              <Text style={styles.sellerStats}>Đánh giá: {formatRating()}</Text>
-              <Text style={styles.sellerStats}>{formatSuccessfulTrades()}</Text>
-              <Text style={styles.sellerStats}>{formatLastActive()}</Text>
-              <Text style={styles.sellerStats}>
-                Khu vực: {formatLocation()}
+          <View style={styles.priceRow}>
+            <Text style={styles.price}>{product.price.toLocaleString()} đ</Text>
+            <View style={styles.statusBadge}>
+              <Text style={styles.statusText}>
+                {STATUS_MAP[product.status] || "Chi tiết"}
               </Text>
             </View>
           </View>
-          <View style={styles.sellerButtons}>
-            <TouchableOpacity
-              style={styles.sellerButton}
-              onPress={() => navigation.navigate("ShopScreen", { shop: {} })}
-            >
-              <Text style={styles.sellerButtonText}>XEM SHOP</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.sellerButton}
-              onPress={() =>
-                navigation.navigate("HomeStack", {
-                  screen: "SearchResults",
-                })
-              }
-            >
-              <Text style={styles.sellerButtonText}>SẢN PHẨM</Text>
-            </TouchableOpacity>
+
+          {/* CẢI TIẾN: Khu vực Location & Distance Cân đối */}
+          <View style={styles.locationContainer}>
+            <View style={styles.locationLeft}>
+              <Icon name="location-sharp" size={18} color={colors.primary} />
+              <Text style={styles.addressText} numberOfLines={2}>
+                {locationLabel}
+              </Text>
+            </View>
+
+            {/* Hiển thị khoảng cách như một Badge riêng biệt */}
+            {distance !== null && (
+              <View style={styles.distanceBadge}>
+                <Icon
+                  name="navigate-circle-outline"
+                  size={14}
+                  color={colors.primary}
+                />
+                <Text style={styles.distanceText}>{distance} km</Text>
+              </View>
+            )}
           </View>
         </View>
 
         <View style={styles.divider} />
 
-        {/* Other Products */}
+        {/* Details Section */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Sản phẩm khác của shop</Text>
-            <TouchableOpacity
-              onPress={() =>
-                navigation.navigate("HomeStack", { screen: "SearchResults" })
-              }
-            >
-              <Text style={styles.seeAllText}>Xem tất cả</Text>
-            </TouchableOpacity>
+          <Text style={styles.sectionTitle}>Thông tin chi tiết</Text>
+          <View style={styles.detailGrid}>
+            <DetailItem
+              label="Tình trạng"
+              value={CONDITION_MAP[product.condition]}
+            />
+            <DetailItem label="Danh mục" value={product.category} />
+            <DetailItem
+              label="Thương lượng"
+              value={product.isNegotiable ? "Có" : "Không"}
+            />
+            <DetailItem
+              label="Đăng lúc"
+              value={new Date(product.createdAt).toLocaleDateString()}
+            />
           </View>
 
-          <FlatList
-            data={related}
-            renderItem={({ item }) => <ProductItem product={item} horizontal />}
-            keyExtractor={(item) => item._id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingLeft: 12 }}
-            ListEmptyComponent={
-              <Text style={[styles.detailValue, { padding: 12 }]}>
-                Chưa có thêm sản phẩm nào từ shop này.
-              </Text>
-            }
-          />
+          <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
+            Mô tả sản phẩm
+          </Text>
+          <Text style={styles.description}>
+            {product.description || "Người bán chưa thêm mô tả."}
+          </Text>
         </View>
+
+        <View style={styles.divider} />
+
+        {/* Seller Profile */}
+        <View style={styles.section}>
+          <View style={styles.sellerHeader}>
+            <View>
+              <Image
+                source={{
+                  uri:
+                    seller?.avatar ||
+                    "https://ui-avatars.com/api/?name=" +
+                      (seller?.fullName || "User"),
+                }}
+                style={styles.avatar}
+              />
+              {/* Hiển thị tích xanh nếu user đã verify */}
+              {seller?.isVerified && (
+                <View style={styles.verifiedBadge}>
+                  <Icon name="checkmark" size={10} color="#fff" />
+                </View>
+              )}
+            </View>
+
+            <View style={styles.sellerInfo}>
+              <Text style={styles.sellerName}>
+                {seller?.fullName || "Người bán"}
+              </Text>
+
+              <View style={styles.ratingRow}>
+                <Icon name="star" size={14} color="#FFD700" />
+                <Text style={styles.ratingText}>
+                  {seller?.rating?.toFixed(1) || "5.0"} •{" "}
+                  {seller?.reviewCount || 0} đánh giá
+                </Text>
+              </View>
+
+              <Text style={styles.sellerSubText}>
+                Đã bán: {seller?.successfulTrades || 0} • Tham gia:{" "}
+                {seller?.createdAt
+                  ? new Date(seller.createdAt).getFullYear()
+                  : "--"}
+              </Text>
+
+              <Text style={styles.sellerSubText}>
+                {seller?.address?.district
+                  ? `${seller.address.district}, `
+                  : ""}
+                {seller?.address?.city || "Toàn quốc"}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.viewShopBtn}
+              onPress={() => {
+                const fallbackSellerId = seller?._id ?? product.sellerId;
+                navigation.navigate("ShopScreen", {
+                  shop: {
+                    sellerId: fallbackSellerId,
+                    ownerId: seller?._id ?? product.sellerId,
+                    avatar: seller?.avatar,
+                    name: seller?.fullName ?? "Người bán",
+                    rating: seller?.rating ?? 5,
+                    totalProducts: related.length || 0,
+                    sold: seller?.successfulTrades ?? 0,
+                    reviewCount: seller?.reviewCount ?? 0,
+                  },
+                });
+              }}
+            >
+              <Text style={styles.viewShopText}>Xem Shop</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Related Products */}
+        {related.length > 0 && (
+          <View style={[styles.section, { paddingBottom: 20 }]}>
+            <Text style={styles.sectionTitle}>Sản phẩm khác từ Shop</Text>
+            <FlatList
+              data={related}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              renderItem={({ item }) => (
+                <ProductItem product={item} horizontal />
+              )}
+              keyExtractor={(i) => i._id}
+              contentContainerStyle={{ gap: 12, paddingTop: 10 }}
+            />
+          </View>
+        )}
       </ScrollView>
 
+      {/* Bottom Action Bar */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity
+          style={styles.chatBtn} // Style mới
+          onPress={() =>
+            handleMessagePress("Mình muốn hỏi thêm về sản phẩm này")
+          }
+          activeOpacity={0.7}
+        >
+          <Icon
+            name="chatbubble-ellipses-outline"
+            size={22}
+            color={colors.primary}
+          />
+          <Text style={styles.chatBtnText}>Chat ngay</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.buyBtn} // Style mới
+          onPress={() => handleMessagePress()} // Lưu ý: chỗ này bạn cần hàm xử lý mua hàng thật
+          activeOpacity={0.8}
+        >
+          <Text style={styles.buyBtnText}>MUA NGAY</Text>
+          <Icon
+            name="arrow-forward"
+            size={20}
+            color="#000"
+            style={{ marginLeft: 4 }}
+          />
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
 
+// Component nhỏ để hiển thị dòng thông tin (Clean Code)
+const DetailItem = ({ label, value }: { label: string; value?: string }) => (
+  <View style={styles.detailRow}>
+    <Text style={styles.detailLabel}>{label}</Text>
+    <Text style={styles.detailValue}>{value || "--"}</Text>
+  </View>
+);
+
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  container: {
-    flex: 1,
-  },
+  safeArea: { flex: 1, backgroundColor: colors.background },
+  center: { justifyContent: "center", alignItems: "center" },
+
+  // Header
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 14,
-    paddingTop: (StatusBar.currentHeight || 0) + 16,
-    paddingBottom: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderColor: colors.border,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 6,
+    borderBottomColor: colors.border,
   },
-  headerButton: {
-    padding: 8,
+  headerRight: { flexDirection: "row", gap: 16 },
+  iconBtn: { padding: 4 },
+
+  // Carousel
+  carouselContainer: {
+    width: width,
+    height: width * 0.85,
+    position: "relative",
   },
-  headerIcons: {
+  mainImage: { width: width, height: width * 0.85, backgroundColor: "#f0f0f0" },
+  imageBadge: {
+    position: "absolute",
+    bottom: 12,
+    right: 12,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  imageBadgeText: { color: "#fff", fontSize: 12, fontWeight: "600" },
+
+  // Sections
+  section: { padding: 16, backgroundColor: colors.surface },
+  divider: { height: 8, backgroundColor: colors.background },
+
+  // Main Info
+  title: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 8,
+    lineHeight: 28,
+  },
+  priceRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
   },
-  imageContainer: {
-    width: width,
-    height: width * 0.85,
-  },
-  productImage: {
-    width: width,
-    height: width * 0.85,
-  },
-  imageCounter: {
-    position: "absolute",
-    bottom: 15,
-    right: 15,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    borderRadius: 15,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  imageCounterText: {
-    color: colors.text,
-    fontSize: 12,
-  },
-  section: {
-    padding: 16,
-    backgroundColor: colors.surface,
-  },
-  divider: {
-    height: 8,
+  price: { fontSize: 24, fontWeight: "800", color: colors.accent },
+  statusBadge: {
     backgroundColor: colors.background,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.border,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
   },
-  productTitle: {
+  statusText: { fontSize: 12, color: colors.textSecondary },
+
+  // Location Styles (TỐI ƯU HIỂN THỊ)
+  locationContainer: {
+    flexDirection: "row",
+    alignItems: "center", // Căn giữa theo chiều dọc
+    justifyContent: "space-between", // Đẩy 2 bên ra xa
+    backgroundColor: colors.background, // Nền nhẹ làm nổi bật
+    padding: 12,
+    borderRadius: 8,
+  },
+  locationLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 8,
+  },
+  addressText: {
+    fontSize: 13,
     color: colors.text,
-    fontSize: 19,
-    fontWeight: "bold",
-    lineHeight: 24,
+    flex: 1,
+    lineHeight: 18,
   },
-  productPrice: {
-    color: colors.primary,
-    fontSize: 26,
-    fontWeight: "800",
-    marginVertical: 12,
+  distanceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#2c2c2e", // Màu xám đen (giống màu than chì)
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
+  distanceText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.primary, // Chữ Vàng trên nền Đen -> Rất nổi
+  },
+
+  // Details
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 12,
+  },
+  detailGrid: { gap: 8 },
   detailRow: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingBottom: 8,
   },
-  detailLabel: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    width: 120,
-  },
-  detailValue: {
-    color: colors.text,
-    fontSize: 14,
-    marginRight: 8,
-    flex: 1,
-  },
-  ctaRow: {
-    flexDirection: "row",
-    marginTop: 12,
-  },
-  ctaSpacing: {
-    marginRight: 8,
-  },
-  ctaPrimary: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
+  detailLabel: { color: colors.textSecondary, fontSize: 14 },
+  detailValue: { color: colors.text, fontSize: 14, fontWeight: "500" },
+  description: { fontSize: 15, lineHeight: 24, color: colors.text },
+
+  // Seller
+  sellerHeader: { flexDirection: "row", alignItems: "center" },
+  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: "#eee" }, // Avatar to hơn xíu
+
+  // Badge tích xanh nhỏ ở góc avatar
+  verifiedBadge: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    backgroundColor: colors.primary, // Hoặc màu xanh dương
+    width: 16,
+    height: 16,
     borderRadius: 8,
-    backgroundColor: colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#fff",
   },
-  ctaPrimaryText: {
-    color: colors.background,
-    fontWeight: "800",
-    fontSize: 13,
-    textTransform: "uppercase",
-  },
-  descriptionText: {
-    color: colors.text,
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    color: colors.text,
+
+  sellerInfo: { flex: 1, marginLeft: 12, justifyContent: "center" },
+  sellerName: {
     fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 15,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 2,
   },
-  sellerInfo: {
+
+  ratingRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 4,
+    marginBottom: 2,
   },
-  sellerAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: colors.accent,
-  },
-  sellerDetails: {
-    marginLeft: 12,
-  },
-  sellerName: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  sellerStats: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    marginTop: 4,
-  },
-  sellerButtons: {
-    flexDirection: "row",
-    marginTop: 15,
-  },
-  sellerButton: {
-    flex: 1,
+  ratingText: { fontSize: 13, color: colors.text, fontWeight: "500" },
+
+  sellerSubText: { fontSize: 12, color: colors.textSecondary, marginTop: 1 },
+
+  viewShopBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderWidth: 1,
     borderColor: colors.primary,
     borderRadius: 20,
-    paddingVertical: 8,
-    alignItems: "center",
-    marginHorizontal: 5,
   },
-  sellerButtonText: {
-    color: colors.primary,
-    fontSize: 13,
-    fontWeight: "bold",
-  },
-  sectionHeader: {
+  viewShopText: { fontSize: 12, color: colors.primary, fontWeight: "600" },
+
+  // Bottom Bar
+  bottomBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    paddingHorizontal: 16, // Padding 2 bên
+    paddingTop: 12,
+    paddingBottom: 24, // Padding đáy lớn hơn cho các máy tai thỏ/không nút home
+    backgroundColor: colors.surface, // Nền trắng sạch sẽ
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0,0,0,0.05)", // Viền mờ tinh tế hơn
+    elevation: 15,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    gap: 12, // (Quan trọng) Tạo khoảng cách đều giữa 2 nút
   },
-  seeAllText: {
-    color: colors.textSecondary,
-    fontSize: 13,
+
+  // Nút Chat (Style Outlined - Viền vàng, nền trắng)
+  chatBtn: {
+    flex: 1, // Cân đối: Chiếm 50% chiều ngang
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.surface, // Nền trắng
+    borderWidth: 2, // Độ dày viền
+    borderColor: colors.primary, // Viền màu vàng
+    borderRadius: 12, // Bo tròn hiện đại hơn
+    height: 50, // Tăng chiều cao một chút cho dễ bấm
+  },
+  chatBtnText: {
+    color: colors.primary, // Chữ màu vàng
+    fontWeight: "700",
+    fontSize: 16,
+  },
+
+  // Nút Mua Ngay (Style Solid - Nền vàng, chữ ĐEN)
+  buyBtn: {
+    flex: 1, // Cân đối: Chiếm 50% chiều ngang
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: colors.primary, // Nền vàng
+    borderRadius: 12,
+    height: 50,
+    // Thêm shadow nhẹ cho nút mua để nổi bật hẳn lên
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  buyBtnText: {
+    color: "#000000", // QUAN TRỌNG: Chữ màu ĐEN trên nền vàng để dễ đọc nhất
+    fontWeight: "800",
+    fontSize: 16,
+    textTransform: "uppercase",
+    letterSpacing: 0.5, // Giãn chữ nhẹ cho sang
   },
 });

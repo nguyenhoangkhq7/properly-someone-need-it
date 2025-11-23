@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, memo } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   Image,
   StyleSheet,
-  Dimensions,
+  ViewStyle,
 } from "react-native";
 import colors from "../config/color";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -13,172 +13,201 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { HomeStackParamList } from "../navigator/HomeNavigator";
 import type { Item } from "../types/Item";
+import type { ItemWithDistance } from "../types/Item"; // Hoặc import type mở rộng của bạn
 import {
   getLocationLabelAsync,
   getLocationLabel,
 } from "../utils/locationLabel";
 
-const { width } = Dimensions.get("window");
-const cardWidth = (width - 40) / 2;
-
 interface Props {
-  product: Item & { distanceKm?: number };
+  product: ItemWithDistance; // Dùng type chính xác
   horizontal?: boolean;
 }
 
-export default function ProductItem({ product, horizontal = false }: Props) {
+const ProductItem = ({ product, horizontal = false }: Props) => {
   const navigation =
     useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
 
-  const [locationLabel, setLocationLabel] = useState(
+  // Khởi tạo state location (Giảm thiểu flash layout)
+  const [locationLabel, setLocationLabel] = useState(() =>
     getLocationLabel(product.location)
   );
-  const hasDistance = Number.isFinite(product.distanceKm);
+
+  const hasDistance =
+    typeof product.distanceKm === "number" &&
+    Number.isFinite(product.distanceKm);
 
   useEffect(() => {
     let mounted = true;
+    // Chỉ gọi async nếu label đồng bộ chưa có hoặc cần update chi tiết
     getLocationLabelAsync(product.location).then((label) => {
-      if (mounted) setLocationLabel(label);
+      if (mounted && label && label !== locationLabel) {
+        setLocationLabel(label);
+      }
     });
     return () => {
       mounted = false;
     };
-  }, [product.location]);
+  }, [product.location]); // Bỏ locationLabel khỏi dependency để tránh loop
 
-  const locationText = locationLabel;
+  // Dynamic Style cho container
+  const containerStyle: ViewStyle = horizontal
+    ? { width: 160, marginRight: 12 } // Horizontal cần width cố định & margin phải
+    : { width: "100%", marginBottom: 12 }; // Vertical cần full width cột & margin dưới
 
   return (
     <TouchableOpacity
-      style={[styles.card, { width: horizontal ? 170 : cardWidth }]}
+      activeOpacity={0.7}
+      style={[styles.card, containerStyle]}
       onPress={() => navigation.navigate("ProductDetail", { product })}
     >
+      {/* Image Section */}
       <View style={styles.imageContainer}>
         <Image
-          source={{ uri: product.images[0] }}
+          source={{ uri: product.images?.[0] }} // Safe access
           style={styles.image}
           resizeMode="cover"
         />
+        {/* Badge Tình trạng (Optional) */}
+        {product.condition === "LIKE_NEW" && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>Like New</Text>
+          </View>
+        )}
       </View>
 
-      <Text style={styles.title} numberOfLines={2}>
-        {product.title}
-      </Text>
-
-      <View style={styles.priceRow}>
-        <View style={styles.priceTag}>
-          <Text style={styles.price} numberOfLines={1} ellipsizeMode="tail">
-            {product.price.toLocaleString()} d
-          </Text>
-        </View>
-      </View>
-
-      {hasDistance && (
-        <View style={styles.distancePill}>
-          <Ionicons
-            name="navigate-outline"
-            size={14}
-            color={colors.primary}
-            style={styles.distanceIcon}
-          />
-          <Text style={styles.distanceText} numberOfLines={1}>
-            {`~${product.distanceKm} km`}
-          </Text>
-        </View>
-      )}
-
-      <View style={styles.metaRow}>
-        <Ionicons
-          name="location-outline"
-          size={14}
-          color={colors.muted}
-          style={styles.metaIcon}
-        />
-        <Text style={styles.locationText} numberOfLines={1}>
-          {locationText}
+      {/* Content Section */}
+      <View style={styles.contentContainer}>
+        <Text style={styles.title} numberOfLines={2}>
+          {product.title}
         </Text>
+
+        <View style={styles.priceRow}>
+          <Text style={styles.price} numberOfLines={1}>
+            {product.price.toLocaleString()} đ
+          </Text>
+        </View>
+
+        {/* Distance & Location */}
+        <View style={styles.footerRow}>
+          {hasDistance && (
+            <View style={styles.distanceTag}>
+              <Ionicons name="navigate" size={10} color={colors.primary} />
+              <Text style={styles.distanceText}>{product.distanceKm} km</Text>
+            </View>
+          )}
+
+          <View style={styles.locationContainer}>
+            <Ionicons
+              name="location-outline"
+              size={12}
+              color={colors.textSecondary}
+            />
+            <Text style={styles.locationText} numberOfLines={1}>
+              {locationLabel}
+            </Text>
+          </View>
+        </View>
       </View>
     </TouchableOpacity>
   );
-}
+};
+
+// Tối ưu Performance: Chỉ render lại khi prop thay đổi
+export default memo(ProductItem, (prev, next) => {
+  return (
+    prev.product._id === next.product._id &&
+    prev.product.distanceKm === next.product.distanceKm &&
+    prev.horizontal === next.horizontal
+  );
+});
 
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: 12,
-    padding: 8,
-    marginHorizontal: 6,
-    marginBottom: 12,
-    overflow: "hidden",
+    // BỎ marginHorizontal cố định để tránh lệch Grid
+    // Shadow nhẹ nhàng hơn
     shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    overflow: "hidden", // Bo tròn cả ảnh
   },
   imageContainer: {
     width: "100%",
-    height: 140,
-    borderRadius: 10,
-    overflow: "hidden",
-    backgroundColor: "#0f100f",
+    aspectRatio: 1, // Vuông vức, đẹp hơn fix height
+    backgroundColor: "#f0f0f0",
+    position: "relative",
   },
-  image: { width: "100%", height: "100%" },
+  image: {
+    width: "100%",
+    height: "100%",
+  },
+  badge: {
+    position: "absolute",
+    top: 6,
+    left: 6,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  badgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "bold",
+  },
+  contentContainer: {
+    padding: 10,
+  },
   title: {
     color: colors.text,
-    fontSize: 15,
-    fontWeight: "700",
-    marginTop: 10,
-    minHeight: 42,
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 20,
+    minHeight: 40, // Giữ chiều cao cố định cho 2 dòng để items bằng nhau
+    marginBottom: 4,
   },
   priceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 10,
-    minHeight: 30,
-  },
-  priceTag: {
-    backgroundColor: colors.accent,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    marginBottom: 8,
   },
   price: {
-    color: colors.surface,
+    color: colors.accent, // Màu cam/đỏ nổi bật
     fontWeight: "700",
-    fontSize: 14,
-    maxWidth: 150,
+    fontSize: 15,
   },
-  distancePill: {
+  footerRow: {
     flexDirection: "row",
     alignItems: "center",
-    alignSelf: "flex-start",
-    marginTop: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#141511",
-    borderWidth: 1,
-    borderColor: colors.border,
+    justifyContent: "space-between",
+    gap: 4,
   },
-  distanceIcon: {
-    marginRight: 6,
+  distanceTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.background, // Hoặc màu tối nhẹ
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    gap: 2,
   },
   distanceText: {
     color: colors.primary,
     fontSize: 10,
     fontWeight: "700",
   },
-  metaRow: {
+  locationContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 8,
-  },
-  metaIcon: {
-    marginRight: 6,
+    flex: 1, // Để text location co giãn
+    justifyContent: "flex-end",
+    gap: 2,
   },
   locationText: {
     color: colors.textSecondary,
-    fontSize: 10,
-    flex: 1,
+    fontSize: 11,
+    maxWidth: "80%", // Tránh bị tràn
   },
 });

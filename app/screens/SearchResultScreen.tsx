@@ -7,7 +7,13 @@ import ProductCard from "../components/ProductCard";
 import colors from "../config/color";
 import { productApi } from "../api/productApi";
 import type { Item } from "../types/Item";
-import { useUser } from "../context/UserContext";
+import { useAuth } from "../context/AuthContext";
+import {
+  getUserLatLng,
+  haversineKm,
+  roundDistanceKm,
+  type LatLng,
+} from "../utils/distance";
 
 const finalColors = {
   ...colors,
@@ -24,8 +30,12 @@ export default function SearchResultsScreen({ route, navigation }: any) {
     userId: routeUserId,
     coords: initialCoords,
   } = route.params || {};
-  const { user } = useUser();
-  const userId = user?._id || routeUserId;
+  const { user } = useAuth();
+  const userId =
+    user?.id ||
+    (user as { _id?: string } | null | undefined)?._id ||
+    routeUserId;
+  const userCoords = getUserLatLng(user);
 
   const [searchText, setSearchText] = useState<string>(query || "");
   const [items, setItems] = useState<ItemWithScore[]>([]);
@@ -34,10 +44,21 @@ export default function SearchResultsScreen({ route, navigation }: any) {
   const [sortType, setSortType] = useState<string>("default"); // default | priceAsc | priceDesc | newest
   const [loading, setLoading] = useState(false);
   const [nearMe, setNearMe] = useState(from === "nearYou");
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
-    initialCoords || null
+  const [coords, setCoords] = useState<LatLng | null>(
+    initialCoords || userCoords || null
   );
   const lastRequestedQuery = useRef<string>("");
+  const userCoordKey = userCoords ? `${userCoords.lat},${userCoords.lng}` : "";
+
+  useEffect(() => {
+    if (!userCoords) return;
+    setCoords((prev) => {
+      if (!prev) return userCoords;
+      const sameLat = Math.abs(prev.lat - userCoords.lat) < 1e-6;
+      const sameLng = Math.abs(prev.lng - userCoords.lng) < 1e-6;
+      return sameLat && sameLng ? prev : userCoords;
+    });
+  }, [userCoordKey]);
 
   const fallbackCoords = { lat: 21.0285, lng: 105.8542 }; // Hanoi center
 
@@ -72,8 +93,12 @@ export default function SearchResultsScreen({ route, navigation }: any) {
   const fetchNearBy = async () => {
     setLoading(true);
     try {
-      const origin = coords || (await resolveLocation()) || fallbackCoords;
-      setCoords(origin);
+      const origin =
+        userCoords ||
+        coords ||
+        (await resolveLocation()) ||
+        fallbackCoords;
+      setCoords((prev) => (userCoords ? userCoords : prev ?? origin));
       const data = await productApi.getNearBy(origin.lat, origin.lng, 5000);
       setItems(data);
       setNearMe(true);
@@ -149,24 +174,14 @@ export default function SearchResultsScreen({ route, navigation }: any) {
   }, [from, query, userId]);
 
   useEffect(() => {
-    if (!nearMe || coords) return;
+    if (!nearMe || coords || userCoords) return;
     resolveLocation().then((loc) => {
       if (loc) setCoords(loc);
     });
-  }, [nearMe, coords]);
+  }, [nearMe, coords, userCoordKey]);
 
   const filteredData = useMemo(() => {
     let data: ItemWithScore[] = [...items];
-    const toRad = (d: number) => (d * Math.PI) / 180;
-    const distanceKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
-      const R = 6371;
-      const dLat = toRad(b.lat - a.lat);
-      const dLon = toRad(b.lng - a.lng);
-      const lat1 = toRad(a.lat);
-      const lat2 = toRad(b.lat);
-      const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-      return 2 * R * Math.asin(Math.sqrt(h));
-    };
 
     if (category) {
       data = data.filter((p) => p.category === category);
@@ -177,13 +192,13 @@ export default function SearchResultsScreen({ route, navigation }: any) {
     }
 
     if (nearMe) {
-      const origin = coords || fallbackCoords;
+      const origin = userCoords || coords || fallbackCoords;
       data = data
         .map((p) => {
           if (!p.location?.coordinates?.length) return null;
           const [lng, lat] = p.location.coordinates;
-          const km = distanceKm(origin, { lat, lng });
-          return { ...p, distanceKm: Math.round(km * 10) / 10 };
+          const km = haversineKm(origin, { lat, lng });
+          return { ...p, distanceKm: roundDistanceKm(km) };
         })
         .filter((p) => p && p.distanceKm !== undefined && p.distanceKm <= 5) as ItemWithScore[];
 
@@ -205,7 +220,7 @@ export default function SearchResultsScreen({ route, navigation }: any) {
     }
 
     return data;
-  }, [items, category, activeFilter, sortType, nearMe, coords]);
+  }, [items, category, activeFilter, sortType, nearMe, coords, userCoordKey]);
 
   useEffect(() => {
     setFiltered(filteredData);
