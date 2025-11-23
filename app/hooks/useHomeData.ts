@@ -4,25 +4,19 @@ import { haversineKm, roundDistanceKm } from "../utils/distance";
 import type { Item } from "../types/Item";
 import type { ItemWithDistance } from "../types/Item";
 
-// Hàm tiện ích: Nhận vào danh sách Item -> Trả về danh sách có distanceKm
+// ... (Giữ nguyên hàm addDistanceToItems như cũ) ...
 const addDistanceToItems = (
   items: Item[],
   userCoords: { lat: number; lng: number } | null
 ): ItemWithDistance[] => {
   if (!items || !items.length) return [];
-  // Nếu chưa có tọa độ user, trả về item gốc (distanceKm = undefined)
   if (!userCoords) return items;
 
   return items.map((item) => {
     const itemCoords = item.location?.coordinates;
-
-    // VALIDATE KỸ: MongoDB GeoJSON lưu là [LONGITUDE, LATITUDE]
     if (Array.isArray(itemCoords) && itemCoords.length === 2) {
-      const [lng, lat] = itemCoords; // Lấy đúng thứ tự
-
-      // Kiểm tra tọa độ hợp lệ (Lat: -90 đến 90, Lng: -180 đến 180)
+      const [lng, lat] = itemCoords;
       if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-        // Tính khoảng cách từ User -> Item
         const km = haversineKm(userCoords, { lat, lng });
         return { ...item, distanceKm: roundDistanceKm(km) };
       }
@@ -37,8 +31,9 @@ export const useHomeData = (
 ) => {
   const [data, setData] = useState({
     nearby: [] as ItemWithDistance[],
-    forYou: [] as ItemWithDistance[], // Cập nhật Type: có distance
-    items: [] as ItemWithDistance[], // Cập nhật Type: có distance
+    forYou: [] as ItemWithDistance[],
+    newArrivals: [] as ItemWithDistance[], // <--- THÊM MỚI
+    items: [] as ItemWithDistance[],
   });
   const [loading, setLoading] = useState(true);
 
@@ -46,7 +41,7 @@ export const useHomeData = (
     setLoading(true);
 
     try {
-      // 1. Định nghĩa các task gọi API
+      // --- Task 1: Dành cho bạn ---
       const fetchForYouTask = async (): Promise<Item[]> => {
         let res: Item[] = [];
         if (userId) {
@@ -54,6 +49,7 @@ export const useHomeData = (
             res = await productApi.getForYou(userId);
           } catch {}
         }
+        // Fallback nếu không có gợi ý
         if (!res?.length) {
           try {
             res = await productApi.getNewItems();
@@ -62,11 +58,10 @@ export const useHomeData = (
         return res ? res.slice(0, 5) : [];
       };
 
+      // --- Task 2: Gần bạn ---
       const fetchNearbyTask = async (): Promise<Item[]> => {
         if (!coords) return [];
         try {
-          // Lưu ý: API getNearBy thường đã sort theo khoảng cách,
-          // nhưng ta vẫn cần tính lại km để hiển thị
           const res = await productApi.getNearBy(coords.lat, coords.lng, 5000);
           return res.slice(0, 5);
         } catch {
@@ -74,6 +69,37 @@ export const useHomeData = (
         }
       };
 
+      // --- Task 3: Mới nhất (7 ngày qua) ---
+      const fetchNewArrivalsTask = async (): Promise<Item[]> => {
+        try {
+          // Gọi API lấy danh sách sản phẩm mới (giả sử lấy 20 item để lọc)
+          const res = await productApi.getNewItems();
+
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+          // Logic lọc và sắp xếp
+          const filtered = res.filter((item) => {
+            // Đảm bảo item có createdAt
+            if (!item.createdAt) return false;
+            const itemDate = new Date(item.createdAt);
+            return itemDate >= sevenDaysAgo;
+          });
+
+          // Sắp xếp: Mới nhất lên đầu (Descending)
+          filtered.sort((a, b) => {
+            return (
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+          });
+
+          return filtered.slice(0, 5); // Lấy top 5 hiển thị home
+        } catch {
+          return [];
+        }
+      };
+
+      // --- Task 4: Tất cả (để fallback) ---
       const fetchItemsTask = async (): Promise<Item[]> => {
         try {
           const res = await productApi.getAll();
@@ -83,27 +109,28 @@ export const useHomeData = (
         }
       };
 
-      // 2. Chạy song song
-      const [rawForYou, rawNearby, rawItems] = await Promise.all([
-        fetchForYouTask(),
-        fetchNearbyTask(),
-        fetchItemsTask(),
-      ]);
+      // Chạy song song 4 task
+      const [rawForYou, rawNearby, rawNewArrivals, rawItems] =
+        await Promise.all([
+          fetchForYouTask(),
+          fetchNearbyTask(),
+          fetchNewArrivalsTask(),
+          fetchItemsTask(),
+        ]);
 
-      // 3. Tính toán khoảng cách cho TẤT CẢ các danh sách
-      // Lúc này coords có thể null, hàm addDistanceToItems sẽ tự xử lý
+      // Tính khoảng cách cho TẤT CẢ
       const forYou = addDistanceToItems(rawForYou, coords);
       const nearby = addDistanceToItems(rawNearby, coords);
+      const newArrivals = addDistanceToItems(rawNewArrivals, coords); // <--- Xử lý distance
       const items = addDistanceToItems(rawItems, coords);
 
-      setData({ forYou, nearby, items });
+      setData({ forYou, nearby, newArrivals, items });
     } catch (error) {
       console.error("Home data fetch error", error);
     } finally {
       setLoading(false);
     }
   }, [userId, coords?.lat, coords?.lng]);
-  // Dependency quan trọng: Khi coords thay đổi, logic này chạy lại và tính lại khoảng cách
 
   useEffect(() => {
     fetchData();

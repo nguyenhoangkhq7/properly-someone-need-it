@@ -32,18 +32,78 @@ type CategoryCard = {
 
 // Da dang danh muc: ket hop filter theo category va goi y tim kiem tu do (chi thiet bi dien tu)
 const curatedCategories: CategoryCard[] = [
-  { id: "phone", label: "Dien thoai", icon: "\u{1F4F1}", target: { type: "category", value: "PHONE" } },
-  { id: "laptop", label: "Laptop", icon: "\u{1F4BB}", target: { type: "category", value: "LAPTOP" } },
-  { id: "tablet", label: "Tablet", icon: "\u{1F4F2}", target: { type: "category", value: "TABLET" } },
-  { id: "watch", label: "Dong ho", icon: "\u231A", target: { type: "category", value: "WATCH" } },
-  { id: "audio", label: "Tai nghe / Loa", icon: "\u{1F3A7}", target: { type: "category", value: "HEADPHONE" } },
-  { id: "accessory", label: "Phu kien", icon: "\u{1F392}", target: { type: "category", value: "ACCESSORY" } },
-  { id: "camera", label: "May anh", icon: "\u{1F4F7}", target: { type: "query", value: "may anh" } },
-  { id: "console", label: "Console & game", icon: "\u{1F3AE}", target: { type: "query", value: "console game" } },
-  { id: "smarthome", label: "Nha thong minh", icon: "\u{1F3E0}", target: { type: "query", value: "smarthome" } },
-  { id: "tv", label: "TV / Man hinh", icon: "\u{1F4FA}", target: { type: "query", value: "tv man hinh" } },
-  { id: "pc", label: "PC & linh kien", icon: "\u{1F5A5}", target: { type: "query", value: "linh kien pc" } },
-  { id: "other", label: "Khac", icon: "\u2734", target: { type: "category", value: "OTHER" } },
+  {
+    id: "phone",
+    label: "Dien thoai",
+    icon: "\u{1F4F1}",
+    target: { type: "category", value: "PHONE" },
+  },
+  {
+    id: "laptop",
+    label: "Laptop",
+    icon: "\u{1F4BB}",
+    target: { type: "category", value: "LAPTOP" },
+  },
+  {
+    id: "tablet",
+    label: "Tablet",
+    icon: "\u{1F4F2}",
+    target: { type: "category", value: "TABLET" },
+  },
+  {
+    id: "watch",
+    label: "Dong ho",
+    icon: "\u231A",
+    target: { type: "category", value: "WATCH" },
+  },
+  {
+    id: "audio",
+    label: "Tai nghe / Loa",
+    icon: "\u{1F3A7}",
+    target: { type: "category", value: "HEADPHONE" },
+  },
+  {
+    id: "accessory",
+    label: "Phu kien",
+    icon: "\u{1F392}",
+    target: { type: "category", value: "ACCESSORY" },
+  },
+  {
+    id: "camera",
+    label: "May anh",
+    icon: "\u{1F4F7}",
+    target: { type: "query", value: "may anh" },
+  },
+  {
+    id: "console",
+    label: "Console & game",
+    icon: "\u{1F3AE}",
+    target: { type: "query", value: "console game" },
+  },
+  {
+    id: "smarthome",
+    label: "Nha thong minh",
+    icon: "\u{1F3E0}",
+    target: { type: "query", value: "smarthome" },
+  },
+  {
+    id: "tv",
+    label: "TV / Man hinh",
+    icon: "\u{1F4FA}",
+    target: { type: "query", value: "tv man hinh" },
+  },
+  {
+    id: "pc",
+    label: "PC & linh kien",
+    icon: "\u{1F5A5}",
+    target: { type: "query", value: "linh kien pc" },
+  },
+  {
+    id: "other",
+    label: "Khac",
+    icon: "\u2734",
+    target: { type: "category", value: "OTHER" },
+  },
 ];
 
 export default function CategoryScreen() {
@@ -81,7 +141,9 @@ export default function CategoryScreen() {
     <Screen style={styles.safeArea}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Danh muc</Text>
-        <Text style={styles.headerSubtitle}>Chon nhanh hoac nhan de tim goi y</Text>
+        <Text style={styles.headerSubtitle}>
+          Chon nhanh hoac nhan de tim goi y
+        </Text>
       </View>
 
       <FlatList

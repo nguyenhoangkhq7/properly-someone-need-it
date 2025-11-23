@@ -1,246 +1,116 @@
-﻿// screens/SearchResultScreen.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, FlatList, StyleSheet } from "react-native";
+﻿import React, { useMemo, useState } from "react";
+import { View, FlatList, StyleSheet, Text } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+// Components & Hooks
 import SearchHeader from "../components/SearchHeader";
 import FilterSortBar from "../components/FilterSortBar";
-import ProductCard from "../components/ProductCard";
-import colors from "../config/color";
-import { productApi } from "../api/productApi";
-import type { Item } from "../types/Item";
+import ProductItem from "../components/ProductItem"; // Dùng component đã tối ưu Grid
+import { useLocation } from "../hooks/useLocaltion";
+import { useSearchData } from "../hooks/useSearchData"; // Hook vừa tạo ở trên
 import { useAuth } from "../context/AuthContext";
-import {
-  getUserLatLng,
-  haversineKm,
-  roundDistanceKm,
-  type LatLng,
-} from "../utils/distance";
+
+// Utils & Config
+import colors from "../config/color";
+import { haversineKm, roundDistanceKm } from "../utils/distance";
+import type { Item } from "../types/Item";
+import type { ItemWithDistance } from "../types/Item"; // Type mở rộng { ...Item, distanceKm? }
 
 const finalColors = {
   ...colors,
   background: colors.background || "#0A0A0A",
 };
 
-type ItemWithScore = Item & { similarity?: number; distanceKm?: number };
-
 export default function SearchResultsScreen({ route, navigation }: any) {
-  const {
-    query,
-    category,
-    from,
-    userId: routeUserId,
-    coords: initialCoords,
-  } = route.params || {};
+  // 1. Params & Auth
+  const { query, category, from, userId: routeUserId } = route.params || {};
   const { user } = useAuth();
-  const userId =
-    user?.id ||
-    (user as { _id?: string } | null | undefined)?._id ||
-    routeUserId;
-  const userCoords = getUserLatLng(user);
+  const userId = user?.id || routeUserId;
 
+  // 2. Local State
   const [searchText, setSearchText] = useState<string>(query || "");
-  const [items, setItems] = useState<ItemWithScore[]>([]);
-  const [filtered, setFiltered] = useState<ItemWithScore[]>([]);
   const [activeFilter, setActiveFilter] = useState<string>("all"); // all | zeroPrice
-  const [sortType, setSortType] = useState<string>("default"); // default | priceAsc | priceDesc | newest
-  const [loading, setLoading] = useState(false);
-  const [nearMe, setNearMe] = useState(from === "nearYou");
-  const [coords, setCoords] = useState<LatLng | null>(
-    initialCoords || userCoords || null
-  );
-  const lastRequestedQuery = useRef<string>("");
-  const userCoordKey = userCoords ? `${userCoords.lat},${userCoords.lng}` : "";
+  const [sortType, setSortType] = useState<string>("default");
+  const [isNearMeActive, setIsNearMeActive] = useState(from === "nearYou");
 
-  useEffect(() => {
-    if (!userCoords) return;
-    setCoords((prev) => {
-      if (!prev) return userCoords;
-      const sameLat = Math.abs(prev.lat - userCoords.lat) < 1e-6;
-      const sameLng = Math.abs(prev.lng - userCoords.lng) < 1e-6;
-      return sameLat && sameLng ? prev : userCoords;
-    });
-  }, [userCoordKey]);
+  // 3. Hooks: Location & Data Fetching
+  const { coords } = useLocation(); // Tự động lấy GPS hoặc User Address
+  const { items, loading, refetch } = useSearchData({
+    query: searchText,
+    from,
+    userId,
+    coords,
+  });
 
-  const fallbackCoords = { lat: 21.0285, lng: 105.8542 }; // Hanoi center
+  // 4. LOGIC XỬ LÝ DỮ LIỆU TRUNG TÂM (useMemo)
+  // Đây là nơi quan trọng nhất: Map Distance -> Filter -> Sort
+  const processedData = useMemo(() => {
+    let data: ItemWithDistance[] = [...items];
 
-  const lazyRequire = (name: string) => {
-    try {
-      // eslint-disable-next-line no-eval
-      const req = eval("require");
-      return req(name);
-    } catch (_e) {
-      return null;
-    }
-  };
-
-  const resolveLocation = async () => {
-    const Location = lazyRequire("expo-location");
-    if (!Location) return null;
-    try {
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (!perm || perm.status !== "granted") return null;
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      return {
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-      };
-    } catch (_e) {
-      return null;
-    }
-  };
-
-  const fetchNearBy = async () => {
-    setLoading(true);
-    try {
-      const origin =
-        userCoords ||
-        coords ||
-        (await resolveLocation()) ||
-        fallbackCoords;
-      setCoords((prev) => (userCoords ? userCoords : prev ?? origin));
-      const data = await productApi.getNearBy(origin.lat, origin.lng, 5000);
-      setItems(data);
-      setNearMe(true);
-    } catch (e) {
-      console.warn("nearby search error", e);
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchForYouList = async () => {
-    setLoading(true);
-    try {
-      if (userId) {
-        const personalized = await productApi.getForYou(userId);
-        if (personalized && personalized.length) {
-          setItems(personalized);
-          return;
+    // BƯỚC A: Tính khoảng cách cho TẤT CẢ item (nếu có coords)
+    if (coords) {
+      data = data.map((item) => {
+        const itemCoords = item.location?.coordinates;
+        if (Array.isArray(itemCoords) && itemCoords.length === 2) {
+          const [lng, lat] = itemCoords;
+          const km = haversineKm(coords, { lat, lng });
+          return { ...item, distanceKm: roundDistanceKm(km) };
         }
-      }
-      const latest = await productApi.getNewItems();
-      setItems(latest);
-    } catch (e) {
-      console.warn("forYou search error", e);
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchSemantic = async (text?: string) => {
-    const currentQuery = (text ?? searchText).trim();
-    lastRequestedQuery.current = currentQuery;
-    setLoading(true);
-    try {
-      let data: ItemWithScore[] = [];
-      if (currentQuery) {
-        data = await productApi.search(currentQuery, userId, 50);
-      } else {
-        data = await productApi.getAll();
-      }
-      if (lastRequestedQuery.current === currentQuery) {
-        setItems(data);
-      }
-    } catch (e) {
-      console.warn("semantic search error", e);
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    setSearchText(query || "");
-    setActiveFilter("all");
-    setSortType("default");
-
-    if (from === "nearYou") {
-      setNearMe(true);
-      fetchNearBy();
-      return;
+        return item;
+      });
     }
 
-    if (from === "forYou") {
-      setNearMe(false);
-      fetchForYouList();
-      return;
-    }
-
-    setNearMe(false);
-    fetchSemantic(query || "");
-  }, [from, query, userId]);
-
-  useEffect(() => {
-    if (!nearMe || coords || userCoords) return;
-    resolveLocation().then((loc) => {
-      if (loc) setCoords(loc);
-    });
-  }, [nearMe, coords, userCoordKey]);
-
-  const filteredData = useMemo(() => {
-    let data: ItemWithScore[] = [...items];
-
+    // BƯỚC B: Filter
+    // 1. Theo Category (nếu có từ params)
     if (category) {
       data = data.filter((p) => p.category === category);
     }
-
+    // 2. Theo FilterBar (Giá 0đ)
     if (activeFilter === "zeroPrice") {
       data = data.filter((p) => p.price === 0);
     }
-
-    if (nearMe) {
-      const origin = userCoords || coords || fallbackCoords;
-      data = data
-        .map((p) => {
-          if (!p.location?.coordinates?.length) return null;
-          const [lng, lat] = p.location.coordinates;
-          const km = haversineKm(origin, { lat, lng });
-          return { ...p, distanceKm: roundDistanceKm(km) };
-        })
-        .filter((p) => p && p.distanceKm !== undefined && p.distanceKm <= 5) as ItemWithScore[];
-
-      if (sortType === "default") {
-        data.sort(
-          (a, b) =>
-            (a.distanceKm ?? Number.POSITIVE_INFINITY) -
-            (b.distanceKm ?? Number.POSITIVE_INFINITY)
-        );
-      }
+    // 3. Theo "Gần tôi" (< 10km)
+    if (isNearMeActive) {
+      // Chỉ giữ lại item có distanceKm hợp lệ và < 10km (hoặc 5km tùy ý)
+      data = data.filter(
+        (p) => typeof p.distanceKm === "number" && p.distanceKm <= 10
+      );
     }
 
-    if (sortType === "priceAsc") {
-      data.sort((a, b) => a.price - b.price);
-    } else if (sortType === "priceDesc") {
-      data.sort((a, b) => b.price - a.price);
-    } else if (sortType === "newest") {
-      data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    // BƯỚC C: Sort
+    switch (sortType) {
+      case "priceAsc":
+        data.sort((a, b) => a.price - b.price);
+        break;
+      case "priceDesc":
+        data.sort((a, b) => b.price - a.price);
+        break;
+      case "newest":
+        data.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        break;
+      case "default":
+      default:
+        // Nếu đang bật "Gần tôi", mặc định sort theo khoảng cách
+        if (isNearMeActive) {
+          data.sort((a, b) => (a.distanceKm || 9999) - (b.distanceKm || 9999));
+        }
+        break;
     }
 
     return data;
-  }, [items, category, activeFilter, sortType, nearMe, coords, userCoordKey]);
+  }, [items, coords, category, activeFilter, sortType, isNearMeActive]);
 
-  useEffect(() => {
-    setFiltered(filteredData);
-  }, [filteredData]);
-
+  // 5. Handlers
   const handleSubmit = () => {
-    fetchSemantic(searchText);
-  };
-
-  const handleRefresh = () => {
-    if (searchText.trim()) {
-      return fetchSemantic(searchText);
-    }
-    if (from === "nearYou") return fetchNearBy();
-    if (from === "forYou") return fetchForYouList();
-    return fetchSemantic(searchText);
+    // Gọi refetch với từ khóa mới
+    refetch(searchText);
   };
 
   return (
-    <View style={styles.fullScreenContainer}>
+    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <SearchHeader
         searchText={searchText}
         setSearchText={setSearchText}
@@ -249,37 +119,71 @@ export default function SearchResultsScreen({ route, navigation }: any) {
       />
 
       <FilterSortBar
-        totalResults={filtered.length}
+        totalResults={processedData.length}
         activeFilter={activeFilter}
         setActiveFilter={setActiveFilter}
         sortType={sortType}
         setSortType={setSortType}
-        nearMe={nearMe}
-        setNearMe={setNearMe}
+        nearMe={isNearMeActive}
+        setNearMe={setIsNearMeActive}
       />
 
       <FlatList
-        data={filtered}
-        renderItem={({ item }) => (
-          <ProductCard
-            item={item}
-            onPress={() => navigation.navigate("ProductDetail", { product: item })}
-          />
-        )}
+        data={processedData}
         keyExtractor={(item) => item._id}
+        renderItem={({ item }) => (
+          <View style={styles.itemWrapper}>
+            {/* Dùng ProductItem đã tối ưu (đã có memo bên trong) */}
+            <ProductItem product={item} horizontal={false} />
+          </View>
+        )}
+        // Cấu hình Grid 2 cột
         numColumns={2}
         columnWrapperStyle={styles.columnWrapper}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
+        // Refresh Control
         refreshing={loading}
-        onRefresh={handleRefresh}
+        onRefresh={() => refetch(searchText)}
+        showsVerticalScrollIndicator={false}
+        // Empty State
+        ListEmptyComponent={
+          loading ? null : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>
+                Không tìm thấy sản phẩm nào phù hợp.
+              </Text>
+            </View>
+          )
+        }
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  fullScreenContainer: { flex: 1, backgroundColor: finalColors.background },
-  listContainer: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 20 },
-  columnWrapper: { justifyContent: "space-between", marginBottom: 12 },
+  container: {
+    flex: 1,
+    backgroundColor: finalColors.background,
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 40,
+  },
+  columnWrapper: {
+    justifyContent: "space-between",
+    gap: 12, // Dùng gap thay vì marginHorizontal để căn đều
+  },
+  itemWrapper: {
+    flex: 1,
+    maxWidth: "48%",
+  },
+  emptyContainer: {
+    padding: 40,
+    alignItems: "center",
+  },
+  emptyText: {
+    color: colors.textSecondary,
+    fontSize: 16,
+  },
 });

@@ -25,24 +25,20 @@ const HomeScreen = () => {
   const navigation = useNavigation<any>();
   const [searchQuery, setSearchQuery] = useState("");
   const { user } = useAuth();
-
-  // Logic trích xuất ID an toàn hơn
   const userId = user?.id || (user as any)?._id || "";
-
-  // 1. Lấy vị trí
   const { coords, refreshLocation } = useLocation();
 
-  // 2. Lấy dữ liệu (Dựa trên userId và coords)
+  // 1. Destructuring thêm newArrivals
   const {
     nearby,
     forYou,
+    newArrivals, // <--- Dữ liệu mới
     items,
     loading,
     refresh: refreshData,
   } = useHomeData(userId, coords);
 
   const onRefresh = async () => {
-    // Refresh cả vị trí và dữ liệu
     await Promise.all([refreshLocation(), refreshData()]);
   };
 
@@ -52,7 +48,8 @@ const HomeScreen = () => {
     }
   };
 
-  const handleSeeAll = (type: "forYou" | "nearYou") => {
+  // 2. Cập nhật type cho hàm handleSeeAll
+  const handleSeeAll = (type: "forYou" | "nearYou" | "newArrivals") => {
     navigation.navigate("SearchResults", {
       query: "",
       from: type,
@@ -61,7 +58,6 @@ const HomeScreen = () => {
     });
   };
 
-  // Logic hiển thị: Nếu không có forYou (lỗi hoặc rỗng hẳn) thì hiển thị items mới nhất
   const displayForYou = forYou.length > 0 ? forYou : items;
 
   return (
@@ -77,7 +73,7 @@ const HomeScreen = () => {
             refreshing={loading}
             onRefresh={onRefresh}
             tintColor={colors.primary}
-            colors={[colors.primary]} // Cho Android
+            colors={[colors.primary]}
           />
         }
       >
@@ -89,6 +85,7 @@ const HomeScreen = () => {
           />
           <Banner />
 
+          {/* Mục 1: Dành cho bạn */}
           <ProductList
             title="Dành cho bạn"
             products={displayForYou}
@@ -96,6 +93,17 @@ const HomeScreen = () => {
             onSeeAll={() => handleSeeAll("forYou")}
           />
 
+          {/* Mục 2: MỚI NHẤT (7 ngày qua) - Thêm vào đây */}
+          {newArrivals.length > 0 && (
+            <ProductList
+              title="Mới lên kệ"
+              products={newArrivals}
+              horizontal={true}
+              onSeeAll={() => handleSeeAll("newArrivals")}
+            />
+          )}
+
+          {/* Mục 3: Gần bạn */}
           <ProductList
             title="Gần bạn"
             products={nearby}

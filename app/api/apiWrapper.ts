@@ -8,7 +8,11 @@ export interface ApiResponse<T> {
 }
 
 // ---- Base URL ----
-const API_BASE_URL = "http://192.168.1.15:3000";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+
+if (!API_BASE_URL) {
+  throw new Error("Missing EXPO_PUBLIC_API_URL environment variable");
+}
 
 // ---- Tạo axios instance ----
 const api: AxiosInstance = axios.create({
