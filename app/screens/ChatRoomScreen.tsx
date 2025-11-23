@@ -20,6 +20,7 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, Feather } from "@expo/vector-icons";
 import colors from "../config/color";
 import {
@@ -32,12 +33,16 @@ import { useAuth } from "../context/AuthContext";
 
 const finalColors = {
   ...colors,
-  text: colors.text || "#000",
-  background: colors.background || "#FFF",
-  surface: colors.surface || "#F2F2F2",
-  primary: colors.primary || "#007AFF",
-  muted: "#8E8E93",
-  border: "#E5E5EA",
+  text: colors.text ?? "#EDEDED",
+  background: colors.background ?? "#0B0C0A",
+  surface: colors.surface ?? "#11120F",
+  primary: colors.primary ?? "#F6FF00",
+  muted: colors.muted ?? "#8A8A8A",
+  border: colors.border ?? "#232621",
+  success: "#32D583",
+  overlay: "#1A1B17",
+  bubbleMine: "#1F201B",
+  bubblePeer: "#141511",
 };
 
 const TYPING_DEBOUNCE_MS = 500;
@@ -72,7 +77,11 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const [inputText, setInputText] = useState(prefillMessage ?? "");
 
   // Refs
-  const flatListRef = useRef<FlatList<ChatMessage>>(null);
+  type TimelineItem =
+    | { type: "divider"; id: string; label: string }
+    | { type: "message"; id: string; payload: ChatMessage };
+
+  const flatListRef = useRef<FlatList<TimelineItem>>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTypingRef = useRef(false);
 
@@ -80,6 +89,41 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     () => getChatSocket(accessToken ?? null),
     [accessToken]
   );
+
+  const conversationItem = room?.item ?? chat?.item ?? null;
+
+  const formatDayLabel = (input: string) => {
+    const targetDate = new Date(input);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+
+    const sameDay = targetDate.toDateString() === today.toDateString();
+    if (sameDay) return "Hôm nay";
+    if (targetDate.toDateString() === yesterday.toDateString()) return "Hôm qua";
+
+    return targetDate.toLocaleDateString();
+  };
+
+  const timelineData = useMemo<TimelineItem[]>(() => {
+    const items: TimelineItem[] = [];
+    let lastDateKey: string | null = null;
+    messages.forEach((msg) => {
+      const dateKey = new Date(msg.sentAt).toDateString();
+      if (dateKey !== lastDateKey) {
+        items.push({
+          type: "divider",
+          id: `divider-${dateKey}-${msg.id}`,
+          label: formatDayLabel(msg.sentAt),
+        });
+        lastDateKey = dateKey;
+      }
+      items.push({ type: "message", id: msg.id, payload: msg });
+    });
+    return items;
+  }, [messages]);
+
+  const latestMessageId = messages[messages.length - 1]?.id;
 
   // --- 1. LOGIC KHỞI TẠO PHÒNG CHAT (QUAN TRỌNG) ---
   useEffect(() => {
@@ -151,6 +195,11 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       mounted = false;
     };
   }, [activeRoomId]);
+
+  useEffect(() => {
+    if (!activeRoomId) return;
+    chatApi.markAsRead(activeRoomId).catch(() => {});
+  }, [activeRoomId, latestMessageId]);
 
   // --- 3. SOCKET EVENTS ---
   useEffect(() => {
@@ -253,29 +302,20 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     };
   }, [navigation]);
 
+  const connectionLabel = activeRoomId ? "Đã kết nối an toàn" : "Đang kết nối...";
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backBtn}
-        >
-          <Ionicons name="arrow-back" size={24} color={finalColors.text} />
+      <View style={styles.topBar}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={24} color={finalColors.text} />
         </TouchableOpacity>
-
-        <Image source={{ uri: displayInfo.avatar }} style={styles.avatar} />
-
-        <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
+        <View style={styles.topBarInfo}>
+          <Text style={styles.topBarTitle} numberOfLines={1}>
             {displayInfo.name}
           </Text>
-          {/* Loading status */}
-          {!activeRoomId && (
-            <Text style={styles.connectingText}>Đang kết nối...</Text>
-          )}
+          <Text style={styles.topBarSubtitle}>{connectionLabel}</Text>
         </View>
-
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.actionButton}>
             <Feather name="phone" size={20} color={finalColors.primary} />
@@ -286,6 +326,27 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         </View>
       </View>
 
+      <LinearGradient
+        colors={["#1A1B17", "#0B0C0A"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.participantCard}
+      >
+        <Image source={{ uri: displayInfo.avatar }} style={styles.avatarLarge} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.participantName}>{displayInfo.name}</Text>
+          <Text style={styles.participantHint} numberOfLines={2}>
+            {conversationItem?.title
+              ? `Trao đổi về "${conversationItem.title}"`
+              : "Giữ liên lạc nhanh chóng và rõ ràng"}
+          </Text>
+          <View style={styles.connectionRow}>
+            <View style={styles.connectionDot} />
+            <Text style={styles.connectionLabel}>{connectionLabel}</Text>
+          </View>
+        </View>
+      </LinearGradient>
+
       {/* MESSAGES */}
       {(isLoadingMessages && !messages.length) || !activeRoomId ? (
         <View style={styles.centerLoading}>
@@ -294,10 +355,18 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       ) : (
         <FlatList
           ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id || Math.random().toString()}
+          data={timelineData}
+          keyExtractor={(item) => item.id}
           renderItem={({ item }) => {
-            const isMine = item.senderId === user?.id;
+            if (item.type === "divider") {
+              return (
+                <View style={styles.dayDivider}>
+                  <Text style={styles.dayDividerText}>{item.label}</Text>
+                </View>
+              );
+            }
+            const message = item.payload;
+            const isMine = message.senderId === user?.id;
             return (
               <View
                 style={[
@@ -323,7 +392,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                       isMine ? styles.textMine : styles.textOther,
                     ]}
                   >
-                    {item.content}
+                    {message.content}
                   </Text>
                   <Text
                     style={[
@@ -331,7 +400,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                       isMine ? styles.timeMine : styles.timeOther,
                     ]}
                   >
-                    {new Date(item.sentAt).toLocaleTimeString([], {
+                    {new Date(message.sentAt).toLocaleTimeString([], {
                       hour: "2-digit",
                       minute: "2-digit",
                     })}
@@ -340,7 +409,29 @@ export default function ChatRoomScreen({ route, navigation }: any) {
               </View>
             );
           }}
-          contentContainerStyle={{ padding: 16, paddingBottom: 20 }}
+          ListHeaderComponent={
+            conversationItem ? (
+              <View style={styles.productCard}>
+                <Image
+                  source={{ uri: conversationItem.thumbnail ?? FALLBACK_AVATAR }}
+                  style={styles.productThumbnail}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.productLabel}>Sản phẩm đang trao đổi</Text>
+                  <Text style={styles.productTitle} numberOfLines={1}>
+                    {conversationItem.title}
+                  </Text>
+                  {typeof conversationItem.price === "number" && (
+                    <Text style={styles.productPrice}>
+                      {conversationItem.price.toLocaleString("vi-VN") + " đ"}
+                    </Text>
+                  )}
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={finalColors.muted} />
+              </View>
+            ) : null
+          }
+          contentContainerStyle={{ padding: 20, paddingBottom: 32 }}
           onContentSizeChange={() =>
             flatListRef.current?.scrollToEnd({ animated: true })
           }
@@ -348,9 +439,9 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         />
       )}
 
-      {/* TYPING STATUS */}
       {isPeerTyping && (
         <View style={styles.typingContainer}>
+          <View style={styles.typingDot} />
           <Text style={styles.typingText}>{displayInfo.name} đang nhập...</Text>
         </View>
       )}
@@ -358,6 +449,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       {/* INPUT */}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
       >
         <View style={styles.inputContainer}>
           <TouchableOpacity style={styles.attachBtn}>
@@ -371,14 +463,14 @@ export default function ChatRoomScreen({ route, navigation }: any) {
             value={inputText}
             onChangeText={handleTypingChange}
             multiline
-            editable={!!activeRoomId} // Chỉ cho nhập khi đã có phòng
+            editable={!!activeRoomId}
           />
 
           <TouchableOpacity
             onPress={sendMessage}
             style={[
               styles.sendBtn,
-              (!inputText.trim() || !activeRoomId) && { opacity: 0.5 },
+              (!inputText.trim() || !activeRoomId) && { opacity: 0.4 },
             ]}
             disabled={!inputText.trim() || !activeRoomId}
           >
@@ -392,96 +484,171 @@ export default function ChatRoomScreen({ route, navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: finalColors.background },
-
-  // Header
-  header: {
+  topBar: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === "android" ? 36 : 12,
+    paddingBottom: 12,
+    backgroundColor: finalColors.surface,
     borderBottomWidth: 1,
     borderBottomColor: finalColors.border,
-    backgroundColor: finalColors.surface,
-    paddingTop: Platform.OS === "android" ? 40 : 12,
   },
-  backBtn: { padding: 4 },
-  avatar: { width: 40, height: 40, borderRadius: 20, marginLeft: 8 },
-  headerTitle: { fontSize: 17, fontWeight: "700", color: finalColors.text },
-  connectingText: { fontSize: 11, color: finalColors.muted },
-  headerActions: { flexDirection: "row", gap: 16 },
-  actionButton: { padding: 4 },
-
-  // Message List
+  backBtn: { padding: 6, marginRight: 12 },
+  topBarInfo: { flex: 1 },
+  topBarTitle: { fontSize: 18, fontWeight: "700", color: finalColors.text },
+  topBarSubtitle: { marginTop: 2, color: finalColors.muted, fontSize: 12 },
+  headerActions: { flexDirection: "row", gap: 10 },
+  actionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  participantCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 8,
+    borderRadius: 24,
+    padding: 18,
+    gap: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+  },
+  avatarLarge: { width: 64, height: 64, borderRadius: 20 },
+  participantName: { fontSize: 18, fontWeight: "700", color: finalColors.text },
+  participantHint: { marginTop: 4, color: finalColors.textSecondary },
+  connectionRow: { flexDirection: "row", alignItems: "center", marginTop: 10 },
+  connectionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: finalColors.success,
+    marginRight: 6,
+  },
+  connectionLabel: { color: finalColors.textSecondary, fontSize: 12, fontWeight: "600" },
   centerLoading: { flex: 1, justifyContent: "center", alignItems: "center" },
+  productCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: finalColors.overlay,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: finalColors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+  productThumbnail: {
+    width: 54,
+    height: 54,
+    borderRadius: 16,
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+  },
+  productLabel: { fontSize: 12, color: finalColors.muted, marginBottom: 4 },
+  productTitle: { fontSize: 15, color: finalColors.text, fontWeight: "600" },
+  productPrice: { marginTop: 4, color: finalColors.primary, fontWeight: "700" },
+  dayDivider: {
+    alignSelf: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginBottom: 12,
+  },
+  dayDividerText: { color: finalColors.textSecondary, fontSize: 12, fontWeight: "600" },
   msgRow: { flexDirection: "row", marginBottom: 12, alignItems: "flex-end" },
   msgRowLeft: { justifyContent: "flex-start" },
   msgRowRight: { justifyContent: "flex-end" },
   msgAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     marginRight: 8,
     marginBottom: 4,
   },
-
   msgBubble: {
-    maxWidth: "75%",
-    padding: 12,
-    borderRadius: 18,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    maxWidth: "78%",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    borderWidth: 1,
   },
   bubbleMine: {
-    backgroundColor: finalColors.primary,
-    borderBottomRightRadius: 4,
+    backgroundColor: finalColors.bubbleMine,
+    borderBottomRightRadius: 6,
+    borderColor: "rgba(246,255,0,0.35)",
   },
   bubbleOther: {
-    backgroundColor: finalColors.surface,
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: finalColors.border,
+    backgroundColor: finalColors.bubblePeer,
+    borderBottomLeftRadius: 6,
+    borderColor: "rgba(255,255,255,0.05)",
   },
-
   msgText: { fontSize: 15, lineHeight: 22 },
-  textMine: { color: "#fff" },
+  textMine: { color: finalColors.primary },
   textOther: { color: finalColors.text },
-
-  timeText: { fontSize: 10, marginTop: 4, alignSelf: "flex-end" },
-  timeMine: { color: "rgba(255,255,255,0.7)" },
+  timeText: { fontSize: 10, marginTop: 6, alignSelf: "flex-end" },
+  timeMine: { color: finalColors.textSecondary },
   timeOther: { color: finalColors.muted },
-
-  // Typing
-  typingContainer: { paddingHorizontal: 20, paddingBottom: 4 },
+  typingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 6,
+    backgroundColor: "transparent",
+  },
+  typingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: finalColors.primary,
+    marginRight: 8,
+  },
   typingText: { fontSize: 12, color: finalColors.muted, fontStyle: "italic" },
-
-  // Input
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 10,
-    borderTopWidth: 1,
-    borderTopColor: finalColors.border,
-    backgroundColor: finalColors.surface,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    marginTop: 4,
+    borderRadius: 28,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: finalColors.overlay,
+    borderWidth: 1,
+    borderColor: finalColors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   attachBtn: { padding: 8, marginRight: 4 },
   input: {
     flex: 1,
-    backgroundColor: finalColors.background,
-    borderRadius: 20,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 10,
-    maxHeight: 100,
+    maxHeight: 120,
     color: finalColors.text,
     fontSize: 15,
   },
   sendBtn: {
-    backgroundColor: finalColors.primary,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: 8,
+    backgroundColor: finalColors.primary,
+    marginLeft: 6,
   },
 });

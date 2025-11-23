@@ -440,9 +440,21 @@ export default function ProductDetailScreen() {
 
             <TouchableOpacity
               style={styles.viewShopBtn}
-              onPress={() =>
-                navigation.navigate("ShopScreen", { shop: seller })
-              }
+              onPress={() => {
+                const fallbackSellerId = seller?._id ?? product.sellerId;
+                navigation.navigate("ShopScreen", {
+                  shop: {
+                    sellerId: fallbackSellerId,
+                    ownerId: seller?._id ?? product.sellerId,
+                    avatar: seller?.avatar,
+                    name: seller?.fullName ?? "Người bán",
+                    rating: seller?.rating ?? 5,
+                    totalProducts: related.length || 0,
+                    sold: seller?.successfulTrades ?? 0,
+                    reviewCount: seller?.reviewCount ?? 0,
+                  },
+                });
+              }}
             >
               <Text style={styles.viewShopText}>Xem Shop</Text>
             </TouchableOpacity>

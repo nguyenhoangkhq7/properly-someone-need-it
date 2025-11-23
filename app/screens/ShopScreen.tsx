@@ -19,17 +19,20 @@ import colors from "../config/color";
 import Icon from "react-native-vector-icons/Ionicons";
 import MaterialIcon from "react-native-vector-icons/MaterialCommunityIcons";
 import { RouteProp, useNavigation } from "@react-navigation/native";
+import * as ImagePicker from "expo-image-picker";
 import ProductItem from "../components/ProductItem"; // component dùng chung
 import { useAuth } from "../context/AuthContext";
 import {
   createShopReview,
   fetchShopReviews,
+  checkReviewEligibility,
   type ShopReview,
   type ReviewStats,
 } from "../api/reviewApi";
 import type { HomeStackParamList } from "../navigator/HomeNavigator";
 import type { Item } from "../types/Item";
 import { productApi } from "../api/productApi";
+import { uploadMultipleImages } from "../utils/imageUpload";
 
 const { width } = Dimensions.get("window");
 const PRODUCT_CARD_WIDTH = (width - 40) / 3 - 10;
@@ -52,6 +55,24 @@ const OutlineButton = ({
   </TouchableOpacity>
 );
 
+const MAX_REVIEW_IMAGES = 3;
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+
+type LocalReviewImage = {
+  uri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  fileSize?: number | null;
+};
+
+type EligibilityState = {
+  eligible: boolean;
+  reason?: string;
+  orderId?: string;
+  itemId?: string;
+  reviewId?: string;
+};
+
 export default function ShopScreen({ route }: Props) {
   const { shop } = route.params;
   const navigation = useNavigation<any>();
@@ -59,6 +80,8 @@ export default function ShopScreen({ route }: Props) {
 
   const sellerId =
     shop?.ownerId ?? shop?.sellerId ?? shop?._id ?? shop?.id ?? null;
+  const coverImageUri =
+    shop?.coverImage || shop?.banner || shop?.avatar || "https://placehold.co/600x250/11120F/F6FF00?text=Cover";
 
   const [reviews, setReviews] = useState<ShopReview[]>([]);
   const [stats, setStats] = useState<ReviewStats>({ total: 0, averageRating: 0 });
@@ -71,10 +94,20 @@ export default function ShopScreen({ route }: Props) {
   const [sellerItems, setSellerItems] = useState<Item[]>([]);
   const [loadingSellerItems, setLoadingSellerItems] = useState(false);
   const [sellerItemsError, setSellerItemsError] = useState<string | null>(null);
+  const [eligibility, setEligibility] = useState<EligibilityState>({ eligible: false });
+  const [checkingEligibility, setCheckingEligibility] = useState(false);
+  const [selectedReviewImages, setSelectedReviewImages] = useState<LocalReviewImage[]>([]);
 
   const averageRatingLabel = useMemo(() => {
     return stats.averageRating ? stats.averageRating.toFixed(1) : "0.0";
   }, [stats.averageRating]);
+
+  const shopDisplayName = shop?.name ?? shop?.fullName ?? "Shop";
+  const shopAvatar =
+    shop?.avatar || "https://placehold.co/200x200/11120F/F6FF00?text=Shop";
+  const shopRatingValue = Number(shop?.rating ?? stats.averageRating ?? 0);
+  const shopTotalProducts = shop?.totalProducts ?? sellerItems.length;
+  const shopSold = shop?.sold ?? stats.total;
 
   const loadReviews = useCallback(async () => {
     if (!sellerId) {
@@ -100,6 +133,35 @@ export default function ShopScreen({ route }: Props) {
   useEffect(() => {
     loadReviews();
   }, [loadReviews]);
+
+  const refreshEligibility = useCallback(async () => {
+    if (!sellerId) {
+      setEligibility({ eligible: false, reason: "Không xác định được người bán." });
+      return;
+    }
+
+    if (!accessToken) {
+      setEligibility({ eligible: false, reason: "Đăng nhập để viết đánh giá." });
+      return;
+    }
+
+    setCheckingEligibility(true);
+    try {
+      const data = await checkReviewEligibility(sellerId, accessToken);
+      setEligibility(data);
+    } catch (error) {
+      setEligibility({
+        eligible: false,
+        reason: (error as Error).message || "Không kiểm tra được quyền đánh giá.",
+      });
+    } finally {
+      setCheckingEligibility(false);
+    }
+  }, [sellerId, accessToken]);
+
+  useEffect(() => {
+    refreshEligibility();
+  }, [refreshEligibility]);
 
   const loadSellerItems = useCallback(async () => {
     if (!sellerId) {
@@ -130,8 +192,87 @@ export default function ShopScreen({ route }: Props) {
       Alert.alert("Không hợp lệ", "Không xác định được người bán để đánh giá");
       return;
     }
+
+    if (!eligibility.eligible) {
+      Alert.alert(
+        "Không thể viết đánh giá",
+        eligibility.reason || "Bạn cần hoàn tất đơn với shop này trước."
+      );
+      return;
+    }
+
     setIsModalVisible(true);
-  }, [sellerId]);
+  }, [sellerId, eligibility]);
+
+  const handleCloseReviewModal = useCallback(() => {
+    setIsModalVisible(false);
+    setCommentInput("");
+    setRatingInput(5);
+    setSelectedReviewImages([]);
+  }, []);
+
+  const handleRemoveImage = useCallback((uri: string) => {
+    setSelectedReviewImages((prev) => prev.filter((img) => img.uri !== uri));
+  }, []);
+
+  const handlePickImages = useCallback(async () => {
+    const remainingSlots = MAX_REVIEW_IMAGES - selectedReviewImages.length;
+    if (remainingSlots <= 0) {
+      Alert.alert("Giới hạn ảnh", `Bạn chỉ có thể chọn tối đa ${MAX_REVIEW_IMAGES} ảnh.`);
+      return;
+    }
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Thiếu quyền", "Vui lòng cấp quyền truy cập thư viện ảnh.");
+      return;
+    }
+
+    const pickerResult = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: remainingSlots > 1,
+      selectionLimit: remainingSlots,
+      quality: 0.8,
+    });
+
+    if (pickerResult.canceled) {
+      return;
+    }
+
+    const accepted: LocalReviewImage[] = [];
+    const rejected: string[] = [];
+
+    pickerResult.assets.forEach((asset) => {
+      const size = asset.fileSize ?? 0;
+      if (size && size > MAX_IMAGE_SIZE_BYTES) {
+        rejected.push(asset.fileName ?? asset.uri);
+        return;
+      }
+
+      accepted.push({
+        uri: asset.uri,
+        fileName: asset.fileName,
+        mimeType: asset.mimeType,
+        fileSize: asset.fileSize,
+      });
+    });
+
+    if (rejected.length) {
+      Alert.alert(
+        "Ảnh vượt quá 5MB",
+        `Đã bỏ qua: ${rejected.join(", ")}`
+      );
+    }
+
+    if (!accepted.length) {
+      return;
+    }
+
+    setSelectedReviewImages((prev) => {
+      const merged = [...prev, ...accepted];
+      return merged.slice(0, MAX_REVIEW_IMAGES);
+    });
+  }, [selectedReviewImages.length]);
 
   const handleSubmitReview = useCallback(async () => {
     if (!sellerId) {
@@ -146,32 +287,42 @@ export default function ShopScreen({ route }: Props) {
 
     try {
       setIsSubmitting(true);
-      const newReview = await createShopReview(
+      let uploadedUrls: string[] = [];
+      if (selectedReviewImages.length) {
+        uploadedUrls = await uploadMultipleImages(
+          selectedReviewImages.map((img) => img.uri)
+        );
+      }
+
+      await createShopReview(
         {
           sellerId,
           rating: ratingInput,
           comment: commentInput.trim() || undefined,
+          images: uploadedUrls,
         },
         accessToken
       );
 
-      setReviews((prev) => [newReview, ...prev]);
-      setStats((prev) => {
-        const newTotal = prev.total + 1;
-        const sum = prev.averageRating * prev.total + ratingInput;
-        return { total: newTotal, averageRating: Number((sum / newTotal).toFixed(2)) };
-      });
-
-      setCommentInput("");
-      setRatingInput(5);
-      setIsModalVisible(false);
+      await loadReviews();
+      await refreshEligibility();
+      handleCloseReviewModal();
     } catch (error) {
       const message = (error as Error).message || "Không thể gửi đánh giá";
       Alert.alert("Lỗi", message);
     } finally {
       setIsSubmitting(false);
     }
-  }, [sellerId, accessToken, ratingInput, commentInput]);
+  }, [
+    sellerId,
+    accessToken,
+    ratingInput,
+    commentInput,
+    selectedReviewImages,
+    loadReviews,
+    refreshEligibility,
+    handleCloseReviewModal,
+  ]);
 
   const renderReviewItem = useCallback(({ item }: { item: ShopReview }) => {
     const reviewerName = item.reviewerId?.fullName || "Người dùng";
@@ -210,6 +361,13 @@ export default function ShopScreen({ route }: Props) {
           <Text style={styles.reviewDate}>{formattedDate}</Text>
         </View>
         {item.comment ? <Text style={styles.reviewComment}>{item.comment}</Text> : null}
+        {item.images && item.images.length ? (
+          <View style={styles.reviewImagesRow}>
+            {item.images.map((uri) => (
+              <Image key={uri} source={{ uri }} style={styles.reviewImageThumb} />
+            ))}
+          </View>
+        ) : null}
       </View>
     );
   }, []);
@@ -263,30 +421,27 @@ export default function ShopScreen({ route }: Props) {
       </View>
 
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        <ImageBackground
-          source={{
-            uri: shop.avatar || "https://placehold.co/600x250/11120F/F6FF00?text=Cover",
-          }}
-          style={styles.coverImage}
-        />
+        <ImageBackground source={{ uri: coverImageUri }} style={styles.coverImage} />
 
         <View style={styles.mainContent}>
           <View style={styles.shopInfoCard}>
-            <Image source={require("../../assets/peopple.jpg")} style={styles.shopAvatar} />
-            <Text style={styles.shopName}>{shop.name}</Text>
-            <Text style={styles.shopStats}>
-              {shop.totalProducts} Sản phẩm • {shop.sold} Đã bán
-            </Text>
+              <Image source={{ uri: shopAvatar }} style={styles.shopAvatar} />
+              <Text style={styles.shopName}>{shopDisplayName}</Text>
+              <Text style={styles.shopStats}>
+                {shopTotalProducts} Sản phẩm • {shopSold} Đã bán
+              </Text>
             <View style={styles.shopStars}>
               {[...Array(5)].map((_, i) => (
                 <Icon
                   key={i}
-                  name={i + 1 <= shop.rating ? "star" : "star-outline"}
+                    name={i + 1 <= shopRatingValue ? "star" : "star-outline"}
                   size={16}
-                  color={i + 1 <= shop.rating ? STAR_COLOR : colors.border}
+                    color={i + 1 <= shopRatingValue ? STAR_COLOR : colors.border}
                 />
               ))}
-              <Text style={styles.shopRatingText}>({shop.rating}/5)</Text>
+                <Text style={styles.shopRatingText}>
+                  ({shopRatingValue.toFixed(1)}/5)
+                </Text>
             </View>
           </View>
 
@@ -325,8 +480,19 @@ export default function ShopScreen({ route }: Props) {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Đánh giá</Text>
-            <TouchableOpacity onPress={handleOpenReviewModal}>
-              <Text style={styles.writeReviewText}>Viết đánh giá</Text>
+            <TouchableOpacity
+              onPress={handleOpenReviewModal}
+              disabled={checkingEligibility}
+            >
+              <Text
+                style={[
+                  styles.writeReviewText,
+                  (!eligibility.eligible || checkingEligibility) &&
+                    styles.writeReviewDisabled,
+                ]}
+              >
+                {checkingEligibility ? "Đang kiểm tra..." : "Viết đánh giá"}
+              </Text>
             </TouchableOpacity>
           </View>
           <View style={styles.ratingSummary}>
@@ -336,6 +502,9 @@ export default function ShopScreen({ route }: Props) {
             </View>
             <Text style={styles.ratingCountText}>{stats.total} đánh giá</Text>
           </View>
+          {!eligibility.eligible && eligibility.reason ? (
+            <Text style={styles.eligibilityHint}>{eligibility.reason}</Text>
+          ) : null}
           {reviewList}
         </View>
 
@@ -387,14 +556,35 @@ export default function ShopScreen({ route }: Props) {
               value={commentInput}
               onChangeText={setCommentInput}
             />
+            <View style={styles.imagePickerHeader}>
+              <Text style={styles.imagePickerLabel}>
+                {"Ảnh minh họa (tối đa 3 ảnh, <=5MB/ảnh)"}
+              </Text>
+              <TouchableOpacity onPress={handlePickImages}>
+                <Text style={styles.imagePickerAction}>Chọn ảnh</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.selectedImagesRow}>
+              {selectedReviewImages.length ? (
+                selectedReviewImages.map((img) => (
+                  <View key={img.uri} style={styles.selectedImageWrapper}>
+                    <Image source={{ uri: img.uri }} style={styles.selectedImage} />
+                    <TouchableOpacity
+                      style={styles.removeImageButton}
+                      onPress={() => handleRemoveImage(img.uri)}
+                    >
+                      <Icon name="close" size={14} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.imagePlaceholderText}>Chưa chọn ảnh nào</Text>
+              )}
+            </View>
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonSecondary]}
-                onPress={() => {
-                  setIsModalVisible(false);
-                  setCommentInput("");
-                  setRatingInput(5);
-                }}
+                onPress={handleCloseReviewModal}
                 disabled={isSubmitting}
               >
                 <Text style={styles.modalButtonText}>Hủy</Text>
@@ -559,6 +749,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+  writeReviewDisabled: {
+    color: colors.textSecondary,
+  },
+  eligibilityHint: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginBottom: 12,
+  },
   ratingSummary: {
     flexDirection: "row",
     alignItems: "center",
@@ -635,6 +833,18 @@ const styles = StyleSheet.create({
     marginTop: 10,
     lineHeight: 20,
   },
+  reviewImagesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+  },
+  reviewImageThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    backgroundColor: colors.border,
+  },
   reviewDivider: {
     height: 1,
     backgroundColor: colors.border,
@@ -678,6 +888,52 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginTop: 8,
     textAlignVertical: "top",
+  },
+  imagePickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 12,
+  },
+  imagePickerLabel: {
+    color: colors.text,
+    fontSize: 13,
+    flex: 1,
+  },
+  imagePickerAction: {
+    color: colors.primary,
+    fontWeight: "600",
+    marginLeft: 12,
+  },
+  selectedImagesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginTop: 10,
+  },
+  selectedImageWrapper: {
+    position: "relative",
+  },
+  selectedImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    backgroundColor: colors.border,
+  },
+  removeImageButton: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  imagePlaceholderText: {
+    color: colors.textSecondary,
+    fontSize: 12,
   },
   modalActions: {
     flexDirection: "row",

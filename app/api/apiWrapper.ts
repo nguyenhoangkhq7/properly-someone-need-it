@@ -8,7 +8,7 @@ export interface ApiResponse<T> {
 }
 
 // ---- Base URL ----
-const API_BASE_URL = "http://192.168.1.15:3000";
+const API_BASE_URL = "http://192.168.1.25:3000";
 
 // ---- Tạo axios instance ----
 const api: AxiosInstance = axios.create({
