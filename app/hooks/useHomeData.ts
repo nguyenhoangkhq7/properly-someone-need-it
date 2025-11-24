@@ -27,7 +27,8 @@ const addDistanceToItems = (
 
 export const useHomeData = (
   userId: string,
-  coords: { lat: number; lng: number } | null
+  coords: { lat: number; lng: number } | null,
+  locationReady = true
 ) => {
   const [data, setData] = useState({
     nearby: [] as ItemWithDistance[],
@@ -38,6 +39,10 @@ export const useHomeData = (
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
+    if (!locationReady) {
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -130,7 +135,7 @@ export const useHomeData = (
     } finally {
       setLoading(false);
     }
-  }, [userId, coords?.lat, coords?.lng]);
+  }, [userId, coords?.lat, coords?.lng, locationReady]);
 
   useEffect(() => {
     fetchData();

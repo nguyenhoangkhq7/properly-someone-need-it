@@ -13,7 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/Ionicons";
 import colors from "../config/color";
 
-const API_URL= process.env.EXPO_PUBLIC_API_URL;
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 interface Order {
   _id: string;
@@ -67,11 +67,9 @@ export default function OrderDetailScreen() {
       }
 
       try {
-        const res = await fetch(
-          `${API_URL}/orders/${orderId}`
-        );
+        const res = await fetch(`${API_URL}/orders/${orderId}`);
         const text = await res.text();
-        console.log("Get order raw response", res.status, text);
+        // console.log("Get order raw response", res.status, text);
 
         let data: any;
         try {
@@ -204,70 +202,71 @@ export default function OrderDetailScreen() {
         ) : null}
 
         <View style={styles.statusCard}>
-        <View style={styles.statusRow}>
-          <Icon name="cube-outline" size={22} color={statusColor} />
-          <View style={{ marginLeft: 8 }}>
-            <Text style={[styles.statusText, { color: statusColor }]}>
-              {statusLabel}
-            </Text>
-            <Text style={styles.statusSub}>
-              Mã đơn: {order._id.slice(-8).toUpperCase()}
-            </Text>
-          </View>
-        </View>
-        <Text style={styles.timeText}>
-          Thời gian tạo: {new Date(order.createdAt).toLocaleString("vi-VN")}
-        </Text>
-      </View>
-
-        <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Sản phẩm</Text>
-        <View style={styles.rowBetween}>
-          <Text style={styles.label}>Tên sản phẩm</Text>
-          <Text style={styles.value}>{item?.title || "(itemId: " + order.itemId + ")"}</Text>
-        </View>
-        <View style={styles.rowBetween}>
-          <Text style={styles.label}>Giá tại thời điểm mua</Text>
-          <Text style={styles.price}>{order.priceAtPurchase} đ</Text>
-        </View>
-        </View>
-
-        <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Thông tin giao dịch</Text>
-
-        <View style={styles.infoRow}>
-          <Icon
-            name="location-outline"
-            size={20}
-            color={colors.textSecondary}
-          />
-          <View style={{ marginLeft: 8, flex: 1 }}>
-            <Text style={styles.label}>Địa điểm gặp</Text>
-            <Text style={styles.value}>{address}</Text>
-            {hasCoords && (
-              <Text style={styles.coordText}>
-                Tọa độ: {coords[1].toFixed(5)}, {coords[0].toFixed(5)}
+          <View style={styles.statusRow}>
+            <Icon name="cube-outline" size={22} color={statusColor} />
+            <View style={{ marginLeft: 8 }}>
+              <Text style={[styles.statusText, { color: statusColor }]}>
+                {statusLabel}
               </Text>
-            )}
+              <Text style={styles.statusSub}>
+                Mã đơn: {order._id.slice(-8).toUpperCase()}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.timeText}>
+            Thời gian tạo: {new Date(order.createdAt).toLocaleString("vi-VN")}
+          </Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Sản phẩm</Text>
+          <View style={styles.rowBetween}>
+            <Text style={styles.label}>Tên sản phẩm</Text>
+            <Text style={styles.value}>
+              {item?.title || "(itemId: " + order.itemId + ")"}
+            </Text>
+          </View>
+          <View style={styles.rowBetween}>
+            <Text style={styles.label}>Giá tại thời điểm mua</Text>
+            <Text style={styles.price}>{order.priceAtPurchase} đ</Text>
           </View>
         </View>
 
-      </View>
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Thông tin giao dịch</Text>
 
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Thông tin người mua / bán</Text>
-        <View style={styles.rowBetween}>
-          <Text style={styles.label}>Người mua</Text>
-          <Text style={styles.valueShort}>
-            {buyer?.fullName || order.buyerId.slice(-8).toUpperCase()}
-          </Text>
+          <View style={styles.infoRow}>
+            <Icon
+              name="location-outline"
+              size={20}
+              color={colors.textSecondary}
+            />
+            <View style={{ marginLeft: 8, flex: 1 }}>
+              <Text style={styles.label}>Địa điểm gặp</Text>
+              <Text style={styles.value}>{address}</Text>
+              {hasCoords && (
+                <Text style={styles.coordText}>
+                  Tọa độ: {coords[1].toFixed(5)}, {coords[0].toFixed(5)}
+                </Text>
+              )}
+            </View>
+          </View>
         </View>
-        <View style={styles.rowBetween}>
-          <Text style={styles.label}>Người bán</Text>
-          <Text style={styles.valueShort}>
-            {seller?.fullName || order.sellerId.slice(-8).toUpperCase()}
-          </Text>
-        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Thông tin người mua / bán</Text>
+          <View style={styles.rowBetween}>
+            <Text style={styles.label}>Người mua</Text>
+            <Text style={styles.valueShort}>
+              {buyer?.fullName || order.buyerId.slice(-8).toUpperCase()}
+            </Text>
+          </View>
+          <View style={styles.rowBetween}>
+            <Text style={styles.label}>Người bán</Text>
+            <Text style={styles.valueShort}>
+              {seller?.fullName || order.sellerId.slice(-8).toUpperCase()}
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>

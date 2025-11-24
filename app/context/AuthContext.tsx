@@ -10,8 +10,10 @@ import React, {
 } from "react";
 import { View, ActivityIndicator } from "react-native";
 import colors from "../config/color";
-import { authTokenManager, type ApiClientError } from "../api/axiosClient";
+import axios from "axios";
+import { authTokenManager, type ApiClientError, type ApiResponse } from "../api/axiosClient";
 import { fetchCurrentUser, type AccountProfile } from "../api/authApi";
+import { getApiBaseUrl } from "../config/api";
 
 export interface AuthTokens {
   accessToken: string;
@@ -78,18 +80,52 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [handleProfileError]);
 
+  const refreshAccessToken = useCallback(
+    async (refreshToken: string | null) => {
+      if (!refreshToken) {
+        return null;
+      }
+      try {
+        const response = await axios.post<ApiResponse<{ accessToken: string }>>(
+          `${getApiBaseUrl()}/auth/refresh-token`,
+          { refreshToken }
+        );
+        const newAccessToken = response.data.data.accessToken;
+        await authTokenManager.setTokens({ accessToken: newAccessToken });
+        if (isMountedRef.current) {
+          setAccessToken(newAccessToken);
+        }
+        return newAccessToken;
+      } catch {
+        await authTokenManager.clearTokens();
+        if (isMountedRef.current) {
+          setAccessToken(null);
+          setUser(null);
+        }
+        return null;
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     let isMounted = true;
     (async () => {
       try {
         const tokens = await authTokenManager.hydrate();
-        if (isMounted) {
-          setAccessToken(tokens.accessToken);
-          if (tokens.accessToken) {
+        if (!isMounted) return;
+
+        const hasRefreshToken = !!tokens.refreshToken;
+        setAccessToken(tokens.accessToken);
+
+        // Only attempt auto-restore when we have a refresh token.
+        if (hasRefreshToken) {
+          const refreshedAccessToken = await refreshAccessToken(tokens.refreshToken);
+          if (refreshedAccessToken) {
             try {
               await loadProfile();
             } catch (error) {
-              console.error("Failed to load profile on hydrate", error);
+              console.warn("Failed to load profile after refresh", error);
             }
           }
         }
@@ -105,7 +141,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       isMounted = false;
     };
-  }, [loadProfile]);
+  }, [loadProfile, refreshAccessToken]);
 
   const login = async (tokens: AuthTokens) => {
     await authTokenManager.setTokens(tokens);

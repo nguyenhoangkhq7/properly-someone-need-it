@@ -35,7 +35,7 @@ const HomeScreen = () => {
 
   const { user } = useAuth();
   const userId = user?.id || (user as any)?._id || "";
-  const { coords, refreshLocation } = useLocation();
+  const { coords, refreshLocation, loading: locationLoading } = useLocation();
 
   const {
     nearby,
@@ -43,7 +43,7 @@ const HomeScreen = () => {
     newArrivals,
     items,
     refresh: refreshData,
-  } = useHomeData(userId, coords);
+  } = useHomeData(userId, coords, !locationLoading);
 
   // --- LOGIC REFRESH TÙY CHỈNH ---
   const onRefresh = useCallback(async () => {

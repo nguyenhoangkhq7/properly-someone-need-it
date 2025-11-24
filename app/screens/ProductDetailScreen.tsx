@@ -265,6 +265,46 @@ export default function ProductDetailScreen() {
       }); // Logic gọi API save ở đây
   };
 
+  // Hàm chọn mua ngay (Phúc Vinh)
+  const handleBuyNow = async () => {
+    try {
+      // setIsBuying(true);
+
+      // Tạm thời dùng cứng một _id item thật trong Mongo để test mua hàng
+      const itemId = product?._id;
+
+      if (!accessToken) {
+        // Nếu chưa đăng nhập, chuyển tới màn Login
+        navigation.navigate("Auth", { screen: "Login" });
+        return;
+      }
+
+      const res = await fetch(`${API_URL}/orders`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ itemId }),
+      });
+      const data = await res.json();
+      console.log("Create order response", res.status, data);
+
+      if (!res.ok) {
+        return;
+      }
+
+      const order = data.order;
+      navigation.navigate("OrderDetail", {
+        orderId: order._id,
+      });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      // setIsBuying(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
@@ -499,8 +539,8 @@ export default function ProductDetailScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.buyBtn} // Style mới
-          onPress={() => handleMessagePress()} // Lưu ý: chỗ này bạn cần hàm xử lý mua hàng thật
+          style={styles.buyBtn}
+          onPress={() => handleBuyNow()}
           activeOpacity={0.8}
         >
           <Text style={styles.buyBtnText}>MUA NGAY</Text>
