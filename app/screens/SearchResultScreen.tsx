@@ -1,24 +1,35 @@
-﻿import React, { useMemo, useState } from "react";
-import { View, FlatList, StyleSheet, Text } from "react-native";
+﻿import React, { useMemo, useState, useCallback } from "react"; // 1. Thêm useCallback
+import {
+  View,
+  FlatList,
+  StyleSheet,
+  Text,
+  RefreshControl, // 2. Import RefreshControl
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 // Components & Hooks
 import SearchHeader from "../components/SearchHeader";
 import FilterSortBar from "../components/FilterSortBar";
-import ProductItem from "../components/ProductItem"; // Dùng component đã tối ưu Grid
+import ProductItem from "../components/ProductItem";
 import { useLocation } from "../hooks/useLocaltion";
-import { useSearchData } from "../hooks/useSearchData"; // Hook vừa tạo ở trên
+import { useSearchData } from "../hooks/useSearchData";
 import { useAuth } from "../context/AuthContext";
 
 // Utils & Config
 import colors from "../config/color";
 import { haversineKm, roundDistanceKm } from "../utils/distance";
 import type { Item } from "../types/Item";
-import type { ItemWithDistance } from "../types/Item"; // Type mở rộng { ...Item, distanceKm? }
+import type { ItemWithDistance } from "../types/Item";
 
 const finalColors = {
   ...colors,
   background: colors.background || "#0A0A0A",
+};
+
+// 3. Hàm wait tạo delay
+const wait = (timeout: number) => {
+  return new Promise((resolve) => setTimeout(resolve, timeout));
 };
 
 export default function SearchResultsScreen({ route, navigation }: any) {
@@ -29,12 +40,15 @@ export default function SearchResultsScreen({ route, navigation }: any) {
 
   // 2. Local State
   const [searchText, setSearchText] = useState<string>(query || "");
-  const [activeFilter, setActiveFilter] = useState<string>("all"); // all | zeroPrice
+  const [activeFilter, setActiveFilter] = useState<string>("all");
   const [sortType, setSortType] = useState<string>("default");
   const [isNearMeActive, setIsNearMeActive] = useState(from === "nearYou");
 
+  // State riêng cho UI refresh (pull-to-refresh)
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   // 3. Hooks: Location & Data Fetching
-  const { coords } = useLocation(); // Tự động lấy GPS hoặc User Address
+  const { coords } = useLocation();
   const { items, loading, refetch } = useSearchData({
     query: searchText,
     from,
@@ -42,12 +56,12 @@ export default function SearchResultsScreen({ route, navigation }: any) {
     coords,
   });
 
-  // 4. LOGIC XỬ LÝ DỮ LIỆU TRUNG TÂM (useMemo)
-  // Đây là nơi quan trọng nhất: Map Distance -> Filter -> Sort
+  // 4. LOGIC XỬ LÝ DỮ LIỆU (Giữ nguyên)
   const processedData = useMemo(() => {
     let data: ItemWithDistance[] = [...items];
 
-    // BƯỚC A: Tính khoảng cách cho TẤT CẢ item (nếu có coords)
+    // ... (Giữ nguyên logic tính toán khoảng cách và filter của bạn) ...
+    // BƯỚC A: Tính khoảng cách
     if (coords) {
       data = data.map((item) => {
         const itemCoords = item.location?.coordinates;
@@ -61,17 +75,9 @@ export default function SearchResultsScreen({ route, navigation }: any) {
     }
 
     // BƯỚC B: Filter
-    // 1. Theo Category (nếu có từ params)
-    if (category) {
-      data = data.filter((p) => p.category === category);
-    }
-    // 2. Theo FilterBar (Giá 0đ)
-    if (activeFilter === "zeroPrice") {
-      data = data.filter((p) => p.price === 0);
-    }
-    // 3. Theo "Gần tôi" (< 10km)
+    if (category) data = data.filter((p) => p.category === category);
+    if (activeFilter === "zeroPrice") data = data.filter((p) => p.price === 0);
     if (isNearMeActive) {
-      // Chỉ giữ lại item có distanceKm hợp lệ và < 10km (hoặc 5km tùy ý)
       data = data.filter(
         (p) => typeof p.distanceKm === "number" && p.distanceKm <= 10
       );
@@ -93,7 +99,6 @@ export default function SearchResultsScreen({ route, navigation }: any) {
         break;
       case "default":
       default:
-        // Nếu đang bật "Gần tôi", mặc định sort theo khoảng cách
         if (isNearMeActive) {
           data.sort((a, b) => (a.distanceKm || 9999) - (b.distanceKm || 9999));
         }
@@ -105,9 +110,25 @@ export default function SearchResultsScreen({ route, navigation }: any) {
 
   // 5. Handlers
   const handleSubmit = () => {
-    // Gọi refetch với từ khóa mới
     refetch(searchText);
   };
+
+  // --- HÀM REFRESH MỚI ---
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true); // Hiện icon xoay
+
+    // Delay 100ms để người dùng kịp nhìn thấy hiệu ứng
+    await wait(100);
+
+    try {
+      // Gọi hàm refetch dữ liệu
+      await refetch(searchText);
+    } catch (error) {
+      console.error("Refresh error:", error);
+    } finally {
+      setIsRefreshing(false); // Ẩn icon xoay
+    }
+  }, [refetch, searchText]);
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
@@ -133,21 +154,31 @@ export default function SearchResultsScreen({ route, navigation }: any) {
         keyExtractor={(item) => item._id}
         renderItem={({ item }) => (
           <View style={styles.itemWrapper}>
-            {/* Dùng ProductItem đã tối ưu (đã có memo bên trong) */}
             <ProductItem product={item} horizontal={false} />
           </View>
         )}
-        // Cấu hình Grid 2 cột
         numColumns={2}
         columnWrapperStyle={styles.columnWrapper}
         contentContainerStyle={styles.listContent}
-        // Refresh Control
-        refreshing={loading}
-        onRefresh={() => refetch(searchText)}
+        // --- CẤU HÌNH REFRESH CONTROL ---
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            // iOS
+            tintColor={"white"}
+            title="Đang tải lại..."
+            titleColor={"white"}
+            // Android
+            colors={[colors.text, "red"]}
+            progressBackgroundColor={"white"}
+            progressViewOffset={10}
+          />
+        }
         showsVerticalScrollIndicator={false}
         // Empty State
         ListEmptyComponent={
-          loading ? null : (
+          loading && !isRefreshing ? null : ( // Chỉ hiện empty khi không loading và không refreshing
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>
                 Không tìm thấy sản phẩm nào phù hợp.
@@ -172,7 +203,7 @@ const styles = StyleSheet.create({
   },
   columnWrapper: {
     justifyContent: "space-between",
-    gap: 12, // Dùng gap thay vì marginHorizontal để căn đều
+    gap: 12,
   },
   itemWrapper: {
     flex: 1,

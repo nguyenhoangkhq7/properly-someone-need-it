@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -21,26 +21,48 @@ import { useAuth } from "../context/AuthContext";
 import { useLocation } from "../hooks/useLocaltion";
 import { useHomeData } from "../hooks/useHomeData";
 
+// Hàm tạo delay (đơn vị mili giây)
+const wait = (timeout: number) => {
+  return new Promise((resolve) => setTimeout(resolve, timeout));
+};
+
 const HomeScreen = () => {
   const navigation = useNavigation<any>();
   const [searchQuery, setSearchQuery] = useState("");
+
+  // State quản lý trạng thái refresh
+  const [refreshing, setRefreshing] = useState(false);
+
   const { user } = useAuth();
   const userId = user?.id || (user as any)?._id || "";
   const { coords, refreshLocation } = useLocation();
 
-  // 1. Destructuring thêm newArrivals
   const {
     nearby,
     forYou,
-    newArrivals, // <--- Dữ liệu mới
+    newArrivals,
     items,
-    loading,
     refresh: refreshData,
   } = useHomeData(userId, coords);
 
-  const onRefresh = async () => {
-    await Promise.all([refreshLocation(), refreshData()]);
-  };
+  // --- LOGIC REFRESH TÙY CHỈNH ---
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true); // 1. Bắt đầu hiển thị vòng xoay ngay lập tức
+
+    // 2. Delay 100ms (theo yêu cầu) để tạo cảm giác "đang xử lý"
+    await wait(100);
+
+    try {
+      // 3. Gọi API nạp lại dữ liệu
+      // Promise.all giúp chạy song song cả location và data sản phẩm
+      await Promise.all([refreshLocation(), refreshData()]);
+    } catch (error) {
+      console.error("Lỗi khi refresh:", error);
+    } finally {
+      // 4. Tắt vòng xoay sau khi mọi thứ hoàn tất
+      setRefreshing(false);
+    }
+  }, [refreshLocation, refreshData]);
 
   const handleSearch = () => {
     if (searchQuery.trim()) {
@@ -48,7 +70,6 @@ const HomeScreen = () => {
     }
   };
 
-  // 2. Cập nhật type cho hàm handleSeeAll
   const handleSeeAll = (type: "forYou" | "nearYou" | "newArrivals") => {
     navigation.navigate("SearchResults", {
       query: "",
@@ -68,12 +89,17 @@ const HomeScreen = () => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         style={styles.scrollViewContent}
+        // reload
         refreshControl={
           <RefreshControl
-            refreshing={loading}
+            refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={colors.primary}
-            colors={[colors.primary]}
+            tintColor={"white"}
+            title="Đang tải lại..."
+            titleColor={"white"}
+            colors={["white"]}
+            progressBackgroundColor={"white"}
+            progressViewOffset={20}
           />
         }
       >
@@ -85,7 +111,7 @@ const HomeScreen = () => {
           />
           <Banner />
 
-          {/* Mục 1: Dành cho bạn */}
+          {/* Dành cho bạn */}
           <ProductList
             title="Dành cho bạn"
             products={displayForYou}
@@ -93,7 +119,7 @@ const HomeScreen = () => {
             onSeeAll={() => handleSeeAll("forYou")}
           />
 
-          {/* Mục 2: MỚI NHẤT (7 ngày qua) - Thêm vào đây */}
+          {/* Mới lên kệ */}
           {newArrivals.length > 0 && (
             <ProductList
               title="Mới lên kệ"
@@ -103,7 +129,7 @@ const HomeScreen = () => {
             />
           )}
 
-          {/* Mục 3: Gần bạn */}
+          {/* Gần bạn */}
           <ProductList
             title="Gần bạn"
             products={nearby}
@@ -127,7 +153,7 @@ const styles = StyleSheet.create({
   contentPadding: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    paddingBottom: 50, // Thêm padding bottom để không bị che bởi tab bar (nếu có)
+    paddingBottom: 50,
   },
 });
 

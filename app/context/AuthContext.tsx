@@ -37,6 +37,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -58,13 +59,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const loadProfile = useCallback(async () => {
+    if (isMountedRef.current) {
+      setIsProfileLoading(true);
+    }
     try {
       const profile = await fetchCurrentUser();
       if (isMountedRef.current) {
         setUser(profile);
       }
+      return profile;
     } catch (error) {
       await handleProfileError(error);
+      throw error;
+    } finally {
+      if (isMountedRef.current) {
+        setIsProfileLoading(false);
+      }
     }
   }, [handleProfileError]);
 
@@ -76,7 +86,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (isMounted) {
           setAccessToken(tokens.accessToken);
           if (tokens.accessToken) {
-            await loadProfile();
+            try {
+              await loadProfile();
+            } catch (error) {
+              console.error("Failed to load profile on hydrate", error);
+            }
           }
         }
       } catch (error) {
@@ -96,7 +110,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const login = async (tokens: AuthTokens) => {
     await authTokenManager.setTokens(tokens);
     setAccessToken(tokens.accessToken);
-    await loadProfile();
+    try {
+      await loadProfile();
+    } catch (error) {
+      await authTokenManager.clearTokens();
+      if (isMountedRef.current) {
+        setAccessToken(null);
+        setUser(null);
+      }
+      throw error;
+    }
   };
 
   const logout = async () => {
@@ -105,7 +128,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
   };
 
-  if (isLoading) {
+  const isBootstrapping = isLoading || isProfileLoading;
+
+  if (isBootstrapping) {
     return (
       <View style={{ flex: 1, justifyContent: "center", backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color={colors.primary} />

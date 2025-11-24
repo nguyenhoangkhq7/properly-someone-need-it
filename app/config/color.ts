@@ -10,4 +10,5 @@ export default {
   textSecondary: "#BDBDBD",
   border: "#232621",
   muted: "#8A8A8A",
+  red: "#f13e3eff",
 };
