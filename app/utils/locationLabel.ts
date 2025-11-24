@@ -1,4 +1,5 @@
 ﻿import type { ItemLocation } from "../types/Item";
+import axios from 'axios';
 
 // Lazy-load expo-location to avoid crashes if the native module is missing
 let LocationModule: any = null;
@@ -37,17 +38,12 @@ const fallbackFromCoords = (location?: ItemLocation) => {
 const reverseGeocodeViaHttp = async (lat: number, lng: number) => {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
-    const res = await fetch(url, {
+    const response = await axios.get(url, {
       headers: { "User-Agent": "properly-app/1.0 (location-label)" },
     });
-    const text = await res.text();
-    try {
-      const data = JSON.parse(text);
-      if (res.ok && data?.display_name) {
-        return String(data.display_name);
-      }
-    } catch (_parseErr) {
-      // ignore parse errors; will fall back
+    const data = response.data;
+    if (response.status === 200 && data?.display_name) {
+      return String(data.display_name);
     }
   } catch (_e) {
     // network error; will fall back

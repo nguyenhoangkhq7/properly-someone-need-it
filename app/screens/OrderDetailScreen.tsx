@@ -23,38 +23,6 @@ import type {
 import type { Item } from "../types/Item";
 import type { ApiClientError } from "../api/axiosClient";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
-
-interface Order {
-  _id: string;
-  buyerId: string;
-  sellerId: string;
-  itemId: string;
-  priceAtPurchase: number;
-  status: string;
-  createdAt: string;
-  meetupLocation?: {
-    location?: {
-      type: string;
-      coordinates: number[]; // [lng, lat]
-    };
-    address?: string;
-  };
-  meetupTime?: string;
-}
-
-interface Item {
-  _id: string;
-  title: string;
-  price: number;
-  images?: string[];
-}
-
-interface UserSummary {
-  _id: string;
-  fullName: string;
-}
-
 export default function OrderDetailScreen() {
   const route = useRoute<any>();
   const { orderId } = route.params || {};
@@ -200,23 +168,11 @@ export default function OrderDetailScreen() {
           onPress: async () => {
             try {
               setCanceling(true);
-              const res = await fetch(`${API_URL}/orders/${order._id}/status`, {
-                method: "PATCH",
-                headers: {
-                  "Content-Type": "application/json",
-                  ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-                },
-                body: JSON.stringify({ status: "CANCELLED" }),
-              });
-              const data = await res.json();
-              console.log("Cancel order", res.status, data);
-              if (!res.ok) {
-                Alert.alert("Không hủy được", data?.error || "Có lỗi xảy ra");
-                return;
-              }
+              await orderApi.updateStatus(order._id, "CANCELLED");
               setOrder((prev) => (prev ? { ...prev, status: "CANCELLED" } : prev));
-            } catch (e) {
-              Alert.alert("Không hủy được", "Lỗi mạng, thử lại sau.");
+            } catch (e: any) {
+              const apiError = e as ApiClientError;
+              Alert.alert("Không hủy được", apiError?.message || "Có lỗi xảy ra");
             } finally {
               setCanceling(false);
             }
