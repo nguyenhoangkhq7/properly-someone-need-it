@@ -14,6 +14,7 @@ import colors from "../config/color";
 import Header from "../components/Header";
 import SearchBar from "../components/SearchBar";
 import Banner from "../components/Banner";
+import AdBanner from "../components/AdBanner";
 import ProductList from "../components/ProductList";
 
 // Hooks & Context
@@ -82,6 +83,14 @@ const HomeScreen = () => {
 
   const displayForYou = forYou.length > 0 ? forYou : items;
 
+  // Link tiếp thị liên kết (Affiliate) hoặc link Shop của bạn
+  const shopeeLink =
+    "https://l.facebook.com/l.php?u=https%3A%2F%2Fvn.shp.ee%2Fm5yMrCw%3Ffbclid%3DIwZXh0bgNhZW0CMTAAYnJpZBExbVhGdkNJS3NqaUJoVEo3THNydGMGYXBwX2lkEDIyMjAzOTE3ODgyMDA4OTIAAR7mWWTHIahpg8sOLpcONUuihKWeEBLGjwqG2qKH5XDXKxsNka_XQ2eWbDbW5g_aem_iCPgy9JxoxYuavm-nMQyKA&h=AT1vkPyUaRHUV3lHv1UUNYqhjLEBpVCCwZ6aYYP9uVk-lb7BFYOvgj-OMiVEzmMEJeuVgm6OsNWOuqFePcmgUzz3r_vg-s3i-T41d-hietvlq_gEki3mvUb5rof2zfB9LigT_i5NApxqZLTGBhwj-da0ZUZDV_lc&__tn__=-UK-R&c[0]=AT3bgmMqh627E68wlN8cohhHhCKxZFARHnVNbgW-m0G69E24dA7-kg9IBVhWZCANgyoh3mRPHQGz13azyQNrlbZINwZe3FMbCiw-YCqLarkwxKnHxWM1ma5ZMfPqTcmvTgSQWuR2YsOSBTOPQW9UgI2P1h18iRyrR0naGyblwh2mVIe26742nJivDg33Aq2nt_KPP_U_G4Ns0MpBfegMe0X9rUEmwxk";
+
+  // Ảnh banner Shopee (bạn nên dùng ảnh có tỉ lệ ngang)
+  const bannerImage =
+    "https://cdnmedia.baotintuc.vn/Upload/cVJiASFv9S8nriO7eNwA/files/2021/11/2-11/2021_Shopee1111_KV.png";
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={colors.background} />
@@ -111,6 +120,14 @@ const HomeScreen = () => {
         }
       >
         <View style={styles.contentPadding}>
+          <AdBanner
+            title="Siêu Sale Shopee"
+            description="Giảm giá lên đến 50% cho đồ điện tử"
+            image={bannerImage}
+            cta="Mua Ngay"
+            url={shopeeLink} // Truyền link vào đây
+            onPress={() => console.log("User clicked banner")} // Optional: dùng để log analytics
+          />
           <SearchBar
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
