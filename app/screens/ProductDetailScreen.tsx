@@ -11,6 +11,7 @@ import {
   Dimensions,
   FlatList,
   Alert,
+  Share,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context"; // Dùng cái này thay cho View thường để tránh tai thỏ
 import { RouteProp, useRoute, useNavigation } from "@react-navigation/native";
@@ -90,6 +91,8 @@ export default function ProductDetailScreen() {
   const [distance, setDistance] = useState<number | null>(
     (initialProduct as any).distanceKm ?? null
   );
+
+  const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL || "https://playvault.vn";
 
   // 1. Fetch Product Detail & Seller
   // 1. Fetch Product Detail & Seller
@@ -313,6 +316,43 @@ export default function ProductDetailScreen() {
     ]);
   };
 
+  const handleShareProduct = async () => {
+    try {
+      // 1. Tạo nội dung tin nhắn muốn chia sẻ
+      // Bạn nên thay thế 'https://playvault.vn' bằng domain thật hoặc Deep Link của app bạn
+      const appLink = `${WEB_URL}/products/${product._id}`;
+
+      const message = [
+        `🔥 ${product.title}`,
+        `💰 Giá: ${product.price.toLocaleString()} đ`,
+        `📍 Khu vực: ${locationLabel}`,
+        `👉 Xem chi tiết tại: ${appLink}`,
+      ].join("\n"); // Nối các dòng lại với nhau
+
+      // 2. Gọi API Share
+      const result = await Share.share({
+        message: message, // Nội dung chính (Android + iOS)
+        title: product.title, // Tiêu đề hộp thoại (Android)
+        url: appLink, // iOS thường dùng cái này để nhận diện link
+      });
+
+      if (result.action === Share.sharedAction) {
+        if (result.activityType) {
+          // Đã chia sẻ qua một app cụ thể (chỉ iOS mới trả về cái này)
+          console.log("Shared with activity type: " + result.activityType);
+        } else {
+          // Đã chia sẻ thành công
+          console.log("Shared successfully");
+        }
+      } else if (result.action === Share.dismissedAction) {
+        // Người dùng hủy bỏ chia sẻ (iOS)
+        console.log("Dismissed");
+      }
+    } catch (error: any) {
+      Alert.alert("Lỗi", error.message);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
@@ -333,10 +373,7 @@ export default function ProductDetailScreen() {
               color={savedItem ? colors.primary : colors.text}
             />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => handleMessagePress()}
-          >
+          <TouchableOpacity style={styles.iconBtn} onPress={handleShareProduct}>
             <Icon name="share-social-outline" size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
