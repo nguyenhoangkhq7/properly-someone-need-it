@@ -13,61 +13,58 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/Ionicons";
 import colors from "../config/color";
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
-
-interface Item {
-  _id: string;
-  title: string;
-  description: string;
-  price: number;
-  images?: string[];
-  status: "ACTIVE" | "PENDING" | "SOLD" | "DELETED";
-  createdAt?: string;
-}
+import { useAuth } from "../context/AuthContext";
+import { productApi } from "../api/productApi";
+import type { Item } from "../types/Item";
+import type { ApiClientError } from "../api/axiosClient";
 
 export default function MySellingItemDetailScreen() {
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
   const { itemId } = route.params as { itemId: string };
+  const { accessToken } = useAuth();
 
   const [item, setItem] = useState<Item | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchItem = async () => {
+  const fetchItem = useCallback(async () => {
+    if (!itemId) {
+      setError("Thiếu mã sản phẩm");
+      setLoading(false);
+      return;
+    }
+
+    if (!accessToken) {
+      setError("Bạn cần đăng nhập để xem sản phẩm này");
+      setLoading(false);
+      navigation.navigate("Auth", { screen: "Login" });
+      return;
+    }
+
+    setLoading(true);
     try {
       setError(null);
-      const res = await fetch(`${API_URL}/items/${itemId}`);
-      const text = await res.text();
-      console.log("Get my selling item detail", res.status, text);
-
-      let data: any;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        setError("Phản hồi không phải JSON");
-        return;
+      const data = await productApi.getSellerItemById(itemId);
+      setItem(data);
+    } catch (error) {
+      const apiError = error as ApiClientError;
+      const message =
+        apiError?.message || "Không thể lấy chi tiết sản phẩm. Vui lòng thử lại.";
+      setError(message);
+      if (apiError?.status === 401) {
+        navigation.navigate("Auth", { screen: "Login" });
       }
-
-      if (!res.ok) {
-        setError(data?.message || "Không thể lấy chi tiết sản phẩm");
-        return;
-      }
-
-      setItem(data.item);
-    } catch (e) {
-      console.error("Get my selling item detail error", e);
-      setError("Lỗi mạng");
     } finally {
       setLoading(false);
     }
-  };
+  }, [itemId, accessToken, navigation]);
 
   useFocusEffect(
     useCallback(() => {
       fetchItem();
-    }, [itemId])
+    }, [fetchItem])
   );
 
   const confirmDelete = () => {
@@ -92,38 +89,17 @@ export default function MySellingItemDetailScreen() {
 
     try {
       setUpdating(true);
-      const res = await fetch(
-        `${API_URL}/items/${item._id}/status`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ status: "DELETED" }),
-        }
-      );
-      const text = await res.text();
-      console.log("Delete my selling item", res.status, text);
-
-      let data: any;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        Alert.alert("Lỗi", "Phản hồi không phải JSON");
-        return;
-      }
-
-      if (!res.ok) {
-        Alert.alert("Lỗi", data?.message || "Không thể xóa bài đăng");
-        return;
-      }
-
-      setItem(data.item);
+      const updated = await productApi.updateItemStatus(item._id, "DELETED");
+      setItem(updated);
       Alert.alert("Thành công", "Đã xóa bài đăng");
       navigation.goBack();
-    } catch (e) {
-      console.error("Delete my selling item error", e);
-      Alert.alert("Lỗi", "Lỗi mạng");
+    } catch (error) {
+      const apiError = error as ApiClientError;
+      const message = apiError?.message || "Không thể xóa bài đăng.";
+      Alert.alert("Lỗi", message);
+      if (apiError?.status === 401) {
+        navigation.navigate("Auth", { screen: "Login" });
+      }
     } finally {
       setUpdating(false);
     }

@@ -1,4 +1,5 @@
-import { apiClient } from "../utils/api";
+import api, { type ApiResponse } from "./axiosClient";
+import type { AxiosResponse } from "axios";
 
 export interface ReviewerProfile {
   _id: string;
@@ -45,30 +46,29 @@ export interface ReviewEligibilityResponse {
   reviewId?: string;
 }
 
+const unwrap = async <T>(promise: Promise<AxiosResponse<ApiResponse<T>>>) => {
+  const response = await promise;
+  return response.data.data;
+};
+
 export const fetchShopReviews = async (
   sellerId: string
 ): Promise<ShopReviewsResponse> => {
-  return apiClient.get(`/reviews/${sellerId}`);
+  return unwrap<ShopReviewsResponse>(
+    api.get<ApiResponse<ShopReviewsResponse>>(`/reviews/${sellerId}`)
+  );
 };
 
 export const checkReviewEligibility = async (
-  sellerId: string,
-  accessToken: string
+  sellerId: string
 ): Promise<ReviewEligibilityResponse> => {
-  return apiClient.get(`/reviews/eligible/${sellerId}`, undefined, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+  return unwrap<ReviewEligibilityResponse>(
+    api.get<ApiResponse<ReviewEligibilityResponse>>(`/reviews/eligible/${sellerId}`)
+  );
 };
 
 export const createShopReview = async (
-  payload: CreateReviewPayload,
-  accessToken: string
+  payload: CreateReviewPayload
 ): Promise<ShopReview> => {
-  return apiClient.post(`/reviews`, payload, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+  return unwrap<ShopReview>(api.post<ApiResponse<ShopReview>>(`/reviews`, payload));
 };

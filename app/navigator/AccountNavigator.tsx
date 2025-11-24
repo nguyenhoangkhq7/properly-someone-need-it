@@ -5,6 +5,8 @@ import SellerOrdersScreen from "../screens/SellerOrdersScreen";
 import BuyerOrdersScreen from "../screens/BuyerOrdersScreen";
 import MySellingItemDetailScreen from "../screens/MySellingItemDetailScreen";
 import MySellingItemsScreen from "../screens/MySellingItemsScreen";
+import ProfileEditScreen from "../screens/ProfileEditScreen";
+import colors from "../config/color";
 
 export type AccountStackParamList = {
   AccountMain: undefined;
@@ -12,6 +14,7 @@ export type AccountStackParamList = {
   BuyerOrders: undefined;
   MySellingItemDetail: { itemId: string };
   MySellingItems: undefined;
+  ProfileEdit: undefined;
 };
 
 const Stack = createStackNavigator<AccountStackParamList, "AccountStack">();
@@ -29,6 +32,17 @@ export default function AccountNavigator() {
       <Stack.Screen
         name="MySellingItems"
         component={MySellingItemsScreen}
+      />
+      <Stack.Screen
+        name="ProfileEdit"
+        component={ProfileEditScreen}
+        options={{
+          headerShown: true,
+          title: "Thông tin cá nhân",
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.primary,
+          headerTitleStyle: { color: colors.text },
+        }}
       />
     </Stack.Navigator>
   );
