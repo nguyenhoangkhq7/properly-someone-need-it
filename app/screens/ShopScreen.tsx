@@ -668,13 +668,13 @@ const styles = StyleSheet.create({
   // Header
   header: {
     position: "absolute",
-    top: StatusBar.currentHeight || 0,
+    top: (StatusBar.currentHeight || 0) + 24,
     left: 0,
     zIndex: 10,
   },
   headerButton: {
     padding: 10,
-    backgroundColor: "rgba(0,0,0,0.3)", // Nền mờ
+    backgroundColor: "rgba(0,0,0,0.55)", // Nền đậm hơn cho dễ nhìn
     borderRadius: 20,
     margin: 10,
   },
