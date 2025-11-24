@@ -97,12 +97,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return null;
       }
       try {
-        const response = await axios.post<ApiResponse<{ accessToken: string }>>(
+        const response = await axios.post<
+          ApiResponse<{ accessToken: string; refreshToken?: string | null }>
+        >(
           `${getApiBaseUrl()}/auth/refresh-token`,
           { refreshToken }
         );
-        const newAccessToken = response.data.data.accessToken;
-        await authTokenManager.setTokens({ accessToken: newAccessToken });
+        const { accessToken: newAccessToken, refreshToken: nextRefreshToken } =
+          response.data.data;
+        await authTokenManager.setTokens({
+          accessToken: newAccessToken,
+          refreshToken:
+            typeof nextRefreshToken === "string" ? nextRefreshToken : refreshToken,
+        });
         if (isMountedRef.current) {
           setAccessToken(newAccessToken);
         }
