@@ -1,5 +1,11 @@
 import React from "react";
-import { View, TextInput, TouchableOpacity, Text, StyleSheet } from "react-native";
+import {
+  View,
+  TextInput,
+  TouchableOpacity,
+  Text,
+  StyleSheet,
+} from "react-native";
 import colors from "../config/color";
 
 interface SearchBarProps {
@@ -23,14 +29,14 @@ const SearchBar: React.FC<SearchBarProps> = ({
     <View style={styles.searchContainer}>
       <TextInput
         style={styles.searchInput}
-        placeholder="Tim bang tu khoa..."
+        placeholder="Tìm sản phẩm..."
         placeholderTextColor={finalColors.textSecondary}
         value={searchQuery}
         onChangeText={setSearchQuery}
         onSubmitEditing={onSearchPress}
       />
       <TouchableOpacity style={styles.searchButton} onPress={onSearchPress}>
-        <Text style={styles.searchButtonText}>GO</Text>
+        <Text style={styles.searchButtonText}>Tìm</Text>
       </TouchableOpacity>
     </View>
   );

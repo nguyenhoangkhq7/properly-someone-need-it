@@ -1,10 +1,9 @@
 import { useState, useCallback, useEffect } from "react";
 import { productApi } from "../api/productApi";
 import { haversineKm, roundDistanceKm } from "../utils/distance";
-import type { Item } from "../types/Item";
-import type { ItemWithDistance } from "../types/Item";
+import type { Item, ItemWithDistance } from "../types/Item";
 
-// ... (Giữ nguyên hàm addDistanceToItems như cũ) ...
+// ... (Giữ nguyên hàm addDistanceToItems) ...
 const addDistanceToItems = (
   items: Item[],
   userCoords: { lat: number; lng: number } | null
@@ -16,6 +15,7 @@ const addDistanceToItems = (
     const itemCoords = item.location?.coordinates;
     if (Array.isArray(itemCoords) && itemCoords.length === 2) {
       const [lng, lat] = itemCoords;
+      // Validate toạ độ hợp lệ
       if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
         const km = haversineKm(userCoords, { lat, lng });
         return { ...item, distanceKm: roundDistanceKm(km) };
@@ -33,15 +33,14 @@ export const useHomeData = (
   const [data, setData] = useState({
     nearby: [] as ItemWithDistance[],
     forYou: [] as ItemWithDistance[],
-    newArrivals: [] as ItemWithDistance[], // <--- THÊM MỚI
+    newArrivals: [] as ItemWithDistance[],
     items: [] as ItemWithDistance[],
   });
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
-    if (!locationReady) {
-      return;
-    }
+    // Chỉ fetch khi location đã xử lý xong (dù là có toạ độ hay fallback)
+    if (!locationReady) return;
 
     setLoading(true);
 
@@ -54,10 +53,13 @@ export const useHomeData = (
             res = await productApi.getForYou(userId);
           } catch {}
         }
-        // Fallback nếu không có gợi ý
+        // FIX: Fallback về getAll (lấy ngẫu nhiên hoặc theo danh mục)
+        // thay vì getNewItems để tránh trùng với mục "Mới lên kệ"
         if (!res?.length) {
           try {
-            res = await productApi.getNewItems();
+            res = await productApi.getAll();
+            // Mẹo nhỏ: Xáo trộn mảng để tạo cảm giác mới mẻ (shuffle)
+            res = res.sort(() => 0.5 - Math.random());
           } catch {}
         }
         return res ? res.slice(0, 5) : [];
@@ -67,54 +69,46 @@ export const useHomeData = (
       const fetchNearbyTask = async (): Promise<Item[]> => {
         if (!coords) return [];
         try {
-          const res = await productApi.getNearBy(coords.lat, coords.lng, 5000);
+          // Tăng bán kính hoặc xử lý logic nếu user dùng Fallback Coords (Hà Nội)
+          // Nếu coords == Fallback và user không ở đó, mục này có thể sai.
+          // Tạm thời giữ nguyên logic gọi API
+          const res = await productApi.getNearBy(coords.lat, coords.lng, 50000); // Tăng lên 50km
           return res.slice(0, 5);
         } catch {
           return [];
         }
       };
 
-      // --- Task 3: Mới nhất (7 ngày qua) ---
+      // --- Task 3: Mới lên kệ ---
       const fetchNewArrivalsTask = async (): Promise<Item[]> => {
         try {
-          // Gọi API lấy danh sách sản phẩm mới (giả sử lấy 20 item để lọc)
           const res = await productApi.getNewItems();
 
-          const sevenDaysAgo = new Date();
-          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-          // Logic lọc và sắp xếp
-          const filtered = res.filter((item) => {
-            // Đảm bảo item có createdAt
-            if (!item.createdAt) return false;
-            const itemDate = new Date(item.createdAt);
-            return itemDate >= sevenDaysAgo;
+          // FIX: Bỏ logic lọc cứng 7 ngày (sevenDaysAgo).
+          // Lý do: Nếu shop không post gì 7 ngày qua, app sẽ trống trơn.
+          // Thay vào đó: Chỉ cần sort theo ngày tạo mới nhất là đủ.
+          const sorted = res.sort((a, b) => {
+            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return dateB - dateA; // Mới nhất lên đầu
           });
 
-          // Sắp xếp: Mới nhất lên đầu (Descending)
-          filtered.sort((a, b) => {
-            return (
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            );
-          });
-
-          return filtered.slice(0, 5); // Lấy top 5 hiển thị home
+          return sorted.slice(0, 5);
         } catch {
           return [];
         }
       };
 
-      // --- Task 4: Tất cả (để fallback) ---
+      // --- Task 4: Tất cả (Fallback chung) ---
       const fetchItemsTask = async (): Promise<Item[]> => {
         try {
           const res = await productApi.getAll();
-          return res.slice(0, 5);
+          return res.slice(0, 10); // Lấy nhiều hơn chút để user lướt
         } catch {
           return [];
         }
       };
 
-      // Chạy song song 4 task
       const [rawForYou, rawNearby, rawNewArrivals, rawItems] =
         await Promise.all([
           fetchForYouTask(),
@@ -123,19 +117,19 @@ export const useHomeData = (
           fetchItemsTask(),
         ]);
 
-      // Tính khoảng cách cho TẤT CẢ
-      const forYou = addDistanceToItems(rawForYou, coords);
-      const nearby = addDistanceToItems(rawNearby, coords);
-      const newArrivals = addDistanceToItems(rawNewArrivals, coords); // <--- Xử lý distance
-      const items = addDistanceToItems(rawItems, coords);
-
-      setData({ forYou, nearby, newArrivals, items });
+      // Tính lại khoảng cách cho tất cả item dựa trên coords mới nhất
+      setData({
+        forYou: addDistanceToItems(rawForYou, coords),
+        nearby: addDistanceToItems(rawNearby, coords),
+        newArrivals: addDistanceToItems(rawNewArrivals, coords),
+        items: addDistanceToItems(rawItems, coords),
+      });
     } catch (error) {
       console.error("Home data fetch error", error);
     } finally {
       setLoading(false);
     }
-  }, [userId, coords?.lat, coords?.lng, locationReady]);
+  }, [userId, coords, locationReady]); // Bỏ coords.lat/lng, dùng object coords để React so sánh reference
 
   useEffect(() => {
     fetchData();

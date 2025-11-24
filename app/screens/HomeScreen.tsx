@@ -55,7 +55,8 @@ const HomeScreen = () => {
     try {
       // 3. Gọi API nạp lại dữ liệu
       // Promise.all giúp chạy song song cả location và data sản phẩm
-      await Promise.all([refreshLocation(), refreshData()]);
+      await refreshLocation();
+      await refreshData();
     } catch (error) {
       console.error("Lỗi khi refresh:", error);
     } finally {
@@ -89,17 +90,23 @@ const HomeScreen = () => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         style={styles.scrollViewContent}
+        contentContainerStyle={{ flexGrow: 1 }}
         // reload
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
+            // --- 1. CẤU HÌNH CHO IOS (Nền đen, icon trắng) ---
             tintColor={"white"}
-            title="Đang tải lại..."
-            titleColor={"white"}
-            colors={["white"]}
-            progressBackgroundColor={"white"}
-            progressViewOffset={20}
+            // --- 2. CẤU HÌNH CHO ANDROID (Test màu nổi) ---
+            // Mũi tên màu ĐỎ
+            colors={["red"]}
+            // Nền tròn màu VÀNG
+            progressBackgroundColor={"yellow"}
+            // --- 3. VỊ TRÍ (QUAN TRỌNG) ---
+            // Hãy đưa về 0 hoặc số nhỏ. Vì ScrollView của bạn bắt đầu NGAY DƯỚI Header
+            // nên không cần đẩy xuống quá sâu.
+            progressViewOffset={0}
           />
         }
       >
@@ -149,6 +156,8 @@ const styles = StyleSheet.create({
   },
   scrollViewContent: {
     flex: 1,
+    zIndex: 99, // <--- Thêm dòng này
+    elevation: 1, // <--- Thêm dòng này cho Android
   },
   contentPadding: {
     paddingHorizontal: 16,

@@ -266,7 +266,7 @@ export default function ProductDetailScreen() {
   };
 
   // Hàm chọn mua ngay (Phúc Vinh)
-  const handleBuyNow = async () => {
+  const createOrder = async () => {
     try {
       // setIsBuying(true);
 
@@ -303,6 +303,14 @@ export default function ProductDetailScreen() {
     } finally {
       // setIsBuying(false);
     }
+  };
+
+  // Hỏi xác nhận trước khi mua
+  const handleBuyNow = () => {
+    Alert.alert("Xác nhận mua", "Bạn có muốn mua sản phẩm này không?", [
+      { text: "Hủy", style: "cancel" },
+      { text: "Mua", onPress: () => createOrder() },
+    ]);
   };
 
   return (
