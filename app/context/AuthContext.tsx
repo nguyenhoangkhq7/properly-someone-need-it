@@ -31,6 +31,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (tokens: AuthTokens) => Promise<void>;
   logout: () => Promise<void>;
+  refreshProfile: () => Promise<AuthUser>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -60,10 +61,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const loadProfile = useCallback(async () => {
-    if (isMountedRef.current) {
-      setIsProfileLoading(true);
-    }
+  const fetchAndStoreProfile = useCallback(async () => {
     try {
       const profile = await fetchCurrentUser();
       if (isMountedRef.current) {
@@ -73,12 +71,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       await handleProfileError(error);
       throw error;
+    }
+  }, [handleProfileError]);
+
+  const loadProfile = useCallback(async () => {
+    if (isMountedRef.current) {
+      setIsProfileLoading(true);
+    }
+    try {
+      return await fetchAndStoreProfile();
     } finally {
       if (isMountedRef.current) {
         setIsProfileLoading(false);
       }
     }
-  }, [handleProfileError]);
+  }, [fetchAndStoreProfile]);
+
+  const refreshProfile = useCallback(async () => {
+    return fetchAndStoreProfile();
+  }, [fetchAndStoreProfile]);
 
   const refreshAccessToken = useCallback(
     async (refreshToken: string | null) => {
@@ -86,12 +97,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return null;
       }
       try {
-        const response = await axios.post<ApiResponse<{ accessToken: string }>>(
+        const response = await axios.post<
+          ApiResponse<{ accessToken: string; refreshToken?: string | null }>
+        >(
           `${getApiBaseUrl()}/auth/refresh-token`,
           { refreshToken }
         );
-        const newAccessToken = response.data.data.accessToken;
-        await authTokenManager.setTokens({ accessToken: newAccessToken });
+        const { accessToken: newAccessToken, refreshToken: nextRefreshToken } =
+          response.data.data;
+        await authTokenManager.setTokens({
+          accessToken: newAccessToken,
+          refreshToken:
+            typeof nextRefreshToken === "string" ? nextRefreshToken : refreshToken,
+        });
         if (isMountedRef.current) {
           setAccessToken(newAccessToken);
         }
@@ -178,7 +196,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AuthContext.Provider
-      value={{ accessToken, userToken: accessToken, user, role, isLoading, login, logout }}
+      value={{
+        accessToken,
+        userToken: accessToken,
+        user,
+        role,
+        isLoading,
+        login,
+        logout,
+        refreshProfile,
+      }}
     >
       {children}
     </AuthContext.Provider>

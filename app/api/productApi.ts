@@ -1,26 +1,92 @@
-import { apiClient } from "./apiWrapper";
+import api, { type ApiResponse } from "./axiosClient";
+import type { AxiosResponse } from "axios";
 import type { Item } from "../types/Item";
 
+const unwrap = async <T>(promise: Promise<AxiosResponse<ApiResponse<T>>>) => {
+  const response = await promise;
+  return response.data.data;
+};
+
+type ItemsResponse = ApiResponse<Item[]> | { items?: Item[] };
+interface ItemDetailResponse {
+  item?: Item;
+}
+
 export const productApi = {
-  getAll: () => apiClient.get<Item[]>("/items"),
+  getAll: async () => unwrap<Item[]>(api.get<ApiResponse<Item[]>>("/items")),
 
-  getById: (id: string, userId?: string) =>
-    apiClient.get<Item>(`/items/${id}`, userId ? { userId } : undefined),
+  getById: async (id: string, userId?: string) =>
+    unwrap<Item>(
+      api.get<ApiResponse<Item>>(`/items/${id}`, {
+        params: userId ? { userId } : undefined,
+      })
+    ),
 
-  getByCategory: (category: string) =>
-    apiClient.get<Item[]>(`/items/category/${category}`),
+  getByCategory: async (category: string) =>
+    unwrap<Item[]>(api.get<ApiResponse<Item[]>>(`/items/category/${category}`)),
 
-  getRecommended: (userId: string) =>
-    apiClient.get<Item[]>(`/items/recommended/${userId}`),
+  getRecommended: async (userId: string) =>
+    unwrap<Item[]>(api.get<ApiResponse<Item[]>>(`/items/recommended/${userId}`)),
 
-  getForYou: (userId: string) =>
-    apiClient.get<Item[]>(`/items/for-you/${userId}`),
+  getForYou: async (userId: string) =>
+    unwrap<Item[]>(api.get<ApiResponse<Item[]>>(`/items/for-you/${userId}`)),
 
-  search: (query: string, userId?: string, limit = 50) =>
-    apiClient.get<Item[]>("/search", { q: query, userId, limit }),
+  search: async (query: string, userId?: string, limit = 50) =>
+    unwrap<Item[]>(
+      api.get<ApiResponse<Item[]>>("/search", {
+        params: { q: query, userId, limit },
+      })
+    ),
 
-  getNearBy: (lat: number, lng: number, radius = 5000) =>
-    apiClient.get<Item[]>("/items/nearby", { lat, lng, radius }),
+  getNearBy: async (lat: number, lng: number, radius = 5000) =>
+    unwrap<Item[]>(
+      api.get<ApiResponse<Item[]>>("/items/nearby", {
+        params: { lat, lng, radius },
+      })
+    ),
 
-  getNewItems: () => apiClient.get<Item[]>("/items/new"),
+  getNewItems: async () => unwrap<Item[]>(api.get<ApiResponse<Item[]>>("/items/new")),
+
+  getBySeller: async (sellerId: string) => {
+    if (!sellerId) {
+      throw new Error("Thiếu sellerId");
+    }
+
+    const response = await api.get<ItemsResponse>(`/items/seller/${sellerId}`);
+    if ("data" in response.data) {
+      return response.data.data ?? [];
+    }
+
+    return response.data.items ?? [];
+  },
+
+  getSellerItemById: async (itemId: string) => {
+    if (!itemId) {
+      throw new Error("Thiếu itemId");
+    }
+
+    const response = await api.get<ItemDetailResponse>(`/items/${itemId}`);
+    if (!response.data?.item) {
+      throw new Error("Không tìm thấy sản phẩm");
+    }
+
+    return response.data.item;
+  },
+
+  updateItemStatus: async (itemId: string, status: Item["status"]) => {
+    if (!itemId) {
+      throw new Error("Thiếu itemId");
+    }
+
+    const response = await api.patch<ItemDetailResponse>(
+      `/items/${itemId}/status`,
+      { status }
+    );
+
+    if (!response.data?.item) {
+      throw new Error("Không cập nhật được trạng thái sản phẩm");
+    }
+
+    return response.data.item;
+  },
 };

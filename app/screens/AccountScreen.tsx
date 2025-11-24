@@ -1,5 +1,12 @@
 import React, { useCallback } from "react";
-import { Alert, ScrollView, StyleSheet, View, Text, TouchableOpacity } from "react-native";
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+} from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { StackNavigationProp } from "@react-navigation/stack";
 import ProfileHeader from "../components/account/ProfileHeader";
@@ -32,6 +39,11 @@ export default function AccountScreen() {
 
   const handleOptionPress = useCallback(
     (item: OptionItem) => {
+      if (!user) {
+        Alert.alert("Phiên đăng nhập", "Vui lòng đăng nhập lại để sử dụng tính năng này.");
+        return;
+      }
+
       if (item.action === "logout") {
         Alert.alert("Đăng xuất", "Bạn chắc chắn muốn đăng xuất?", [
           { text: "Hủy", style: "cancel" },
@@ -50,10 +62,29 @@ export default function AccountScreen() {
         return;
       }
 
+      if (item.action === "profile") {
+        navigation.navigate("ProfileEdit");
+        return;
+      }
+
       Alert.alert(item.label, "Tính năng sẽ sớm được cập nhật.");
     },
-    [logout]
+    [logout, navigation, user]
   );
+
+  if (!user) {
+    return (
+      <View style={styles.emptyStateContainer}>
+        <Text style={styles.emptyStateTitle}>Phiên đăng nhập đã hết hạn</Text>
+        <Text style={styles.emptyStateSubtitle}>
+          Vui lòng đăng nhập lại để tiếp tục sử dụng các tính năng tài khoản.
+        </Text>
+        <TouchableOpacity style={styles.reloginButton} onPress={logout}>
+          <Text style={styles.reloginText}>Đăng nhập lại</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>
@@ -100,6 +131,37 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: finalColors.background,
     padding: 8,
+  },
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+    backgroundColor: finalColors.background,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: finalColors.text,
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  emptyStateSubtitle: {
+    color: finalColors.textSecondary,
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  reloginButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: finalColors.primary,
+  },
+  reloginText: {
+    color: finalColors.background,
+    fontWeight: "600",
+    fontSize: 16,
   },
   sellerOrdersButton: {
     marginHorizontal: 12,

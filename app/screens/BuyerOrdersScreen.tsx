@@ -14,24 +14,10 @@ import Icon from "react-native-vector-icons/Ionicons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import colors from "../config/color";
 import { useAuth } from "../context/AuthContext";
-
-interface BuyerOrderItem {
-  order: {
-    _id: string;
-    status: string;
-    createdAt: string;
-    priceAtPurchase: number;
-  };
-  item: {
-    _id: string;
-    title: string;
-    images?: string[];
-  } | null;
-  seller: {
-    _id: string;
-    fullName: string;
-  } | null;
-}
+import { orderApi } from "../api/orderApi";
+import type { BuyerOrderListEntry, OrderFilterStatus } from "../types/Order";
+import type { ApiClientError } from "../api/axiosClient";
+import { InlineErrorBanner } from "../components/InlineErrorBanner";
 
 const statusLabelMap: Record<string, string> = {
   PENDING: "Chờ xác nhận",
@@ -52,57 +38,55 @@ const statusColorMap: Record<string, string> = {
 export default function BuyerOrdersScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
-  const [orders, setOrders] = useState<BuyerOrderItem[]>([]);
+  const [orders, setOrders] = useState<BuyerOrderListEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [filterStatus, setFilterStatus] = useState<"ALL" | string>("ALL");
-  const API_URL = process.env.EXPO_PUBLIC_API_URL;
+  const [filterStatus, setFilterStatus] = useState<OrderFilterStatus>("ALL");
+  const [debouncedFilter, setDebouncedFilter] = useState<OrderFilterStatus>("ALL");
+  const [bannerError, setBannerError] = useState<string | null>(null);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
-  const fetchOrders = async () => {
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedFilter(filterStatus), 300);
+    return () => clearTimeout(timer);
+  }, [filterStatus]);
+
+  const fetchOrders = useCallback(async () => {
     if (!user?.id) {
-      setError("Chưa đăng nhập");
+      setOrders([]);
+      setBannerError("Bạn cần đăng nhập để xem đơn mua.");
       setLoading(false);
       setRefreshing(false);
       return;
     }
 
+    setLoading(true);
     try {
-      setError(null);
-      const query =
-        filterStatus && filterStatus !== "ALL"
-          ? `?status=${encodeURIComponent(filterStatus)}`
-          : "";
-      const res = await fetch(
-        `${API_URL}/orders/buyer/${user.id}${query}`
-      );
-      const text = await res.text();
-      console.log("Get buyer orders", res.status, text);
-      let data: any;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        setError("Phản hồi không phải JSON");
-        return;
+      setBannerError(null);
+      const data = await orderApi.getBuyerOrders({
+        userId: user.id,
+        status: debouncedFilter,
+      });
+      setOrders(data);
+    } catch (error) {
+      const apiError = error as ApiClientError;
+      const message =
+        apiError?.message || "Không thể tải đơn mua, vui lòng thử lại.";
+      setBannerError(message);
+      if (apiError?.status === 401) {
+        navigation.navigate("Auth", { screen: "Login" });
       }
-      if (!res.ok) {
-        setError(data?.error || "Không thể lấy đơn mua");
-        return;
-      }
-      setOrders(data.orders || []);
-    } catch (e) {
-      console.error("Get buyer orders error", e);
-      setError("Lỗi mạng");
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setHasLoadedOnce(true);
     }
-  };
+  }, [user?.id, debouncedFilter, navigation]);
 
   useFocusEffect(
     useCallback(() => {
       fetchOrders();
-    }, [filterStatus])
+    }, [fetchOrders])
   );
 
   const onRefresh = () => {
@@ -110,7 +94,7 @@ export default function BuyerOrdersScreen() {
     fetchOrders();
   };
 
-  const renderOrder = ({ item }: { item: BuyerOrderItem }) => {
+  const renderOrder = ({ item }: { item: BuyerOrderListEntry }) => {
     const { order, seller } = item;
     const firstImage = item.item?.images?.[0];
     const statusLabel = statusLabelMap[order.status] || order.status;
@@ -139,7 +123,9 @@ export default function BuyerOrdersScreen() {
             <Text style={styles.title} numberOfLines={1}>
               {item.item?.title || "(Sản phẩm đã xóa)"}
             </Text>
-            <Text style={styles.price}>{order.priceAtPurchase} đ</Text>
+            <Text style={styles.price}>
+              {order.priceAtPurchase.toLocaleString("vi-VN")} đ
+            </Text>
             <Text style={styles.buyerText}>
               Người bán: {seller?.fullName || seller?._id || "Không rõ"}
             </Text>
@@ -162,7 +148,7 @@ export default function BuyerOrdersScreen() {
     );
   };
 
-  const filters: { key: "ALL" | string; label: string }[] = [
+  const filters: { key: OrderFilterStatus; label: string }[] = [
     { key: "ALL", label: "Tất cả" },
     { key: "PENDING", label: "Chờ xác nhận" },
     { key: "MEETUP_SCHEDULED", label: "Đã hẹn" },
@@ -170,7 +156,7 @@ export default function BuyerOrdersScreen() {
     { key: "CANCELLED", label: "Đã hủy" },
   ];
 
-  if (loading) {
+  if (loading && !hasLoadedOnce) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.primary} />
@@ -216,11 +202,15 @@ export default function BuyerOrdersScreen() {
         />
       </View>
 
-      {error ? (
-        <View style={styles.center}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      ) : orders.length === 0 ? (
+      {bannerError ? (
+        <InlineErrorBanner
+          message={bannerError}
+          actionLabel="Thử lại"
+          onActionPress={fetchOrders}
+        />
+      ) : null}
+
+      {orders.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.emptyText}>Chưa có đơn mua nào</Text>
         </View>
@@ -362,10 +352,6 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     fontSize: 12,
     fontWeight: "500",
-  },
-  errorText: {
-    fontSize: 13,
-    color: "red",
   },
   emptyText: {
     fontSize: 13,

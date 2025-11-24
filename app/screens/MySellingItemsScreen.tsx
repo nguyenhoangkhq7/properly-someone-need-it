@@ -14,16 +14,10 @@ import Icon from "react-native-vector-icons/Ionicons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import colors from "../config/color";
 import { useAuth } from "../context/AuthContext";
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
-
-interface Item {
-  _id: string;
-  title: string;
-  price: number;
-  images?: string[];
-  createdAt?: string;
-  status: "ACTIVE" | "PENDING" | "SOLD" | "DELETED";
-}
+import { productApi } from "../api/productApi";
+import type { Item } from "../types/Item";
+import type { ApiClientError } from "../api/axiosClient";
+import { InlineErrorBanner } from "../components/InlineErrorBanner";
 
 export default function MySellingItemsScreen() {
   const navigation = useNavigation<any>();
@@ -31,51 +25,42 @@ export default function MySellingItemsScreen() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [bannerError, setBannerError] = useState<string | null>(null);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
-  const fetchItems = async () => {
+  const fetchItems = useCallback(async () => {
     if (!user?.id) {
-      setError("Chưa đăng nhập");
+      setBannerError("Bạn cần đăng nhập để xem sản phẩm đang bán.");
+      setItems([]);
       setLoading(false);
       setRefreshing(false);
       return;
     }
 
+    setLoading(true);
     try {
-      setError(null);
-      const res = await fetch(
-        `${API_URL}/items/seller/${user.id}`
-      );
-      const text = await res.text();
-      console.log("Get my selling items", res.status, text);
-
-      let data: any;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        setError("Phản hồi không phải JSON");
-        return;
+      setBannerError(null);
+      const data = await productApi.getBySeller(user.id);
+      setItems(data);
+    } catch (error) {
+      const apiError = error as ApiClientError;
+      const message =
+        apiError?.message || "Không thể tải danh sách sản phẩm đang bán.";
+      setBannerError(message);
+      if (apiError?.status === 401) {
+        navigation.navigate("Auth", { screen: "Login" });
       }
-
-      if (!res.ok) {
-        setError(data?.message || "Không thể lấy danh sách sản phẩm");
-        return;
-      }
-
-      setItems(data.items || []);
-    } catch (e) {
-      console.error("Get my selling items error", e);
-      setError("Lỗi mạng");
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setHasLoadedOnce(true);
     }
-  };
+  }, [user?.id, navigation]);
 
   useFocusEffect(
     useCallback(() => {
       fetchItems();
-    }, [])
+    }, [fetchItems])
   );
 
   const onRefresh = () => {
@@ -110,7 +95,7 @@ export default function MySellingItemsScreen() {
               <Text style={styles.title} numberOfLines={1}>
                 {item.title}
               </Text>
-              <Text style={styles.price}>{item.price} đ</Text>
+              <Text style={styles.price}>{item.price.toLocaleString("vi-VN")} đ</Text>
               <Text
                 style={[
                   styles.status,
@@ -140,7 +125,7 @@ export default function MySellingItemsScreen() {
     );
   };
 
-  if (loading) {
+  if (loading && !hasLoadedOnce) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.primary} />
@@ -161,11 +146,15 @@ export default function MySellingItemsScreen() {
         <View style={{ width: 32 }} />
       </View>
 
-      {error ? (
-        <View style={styles.center}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      ) : items.length === 0 ? (
+      {bannerError ? (
+        <InlineErrorBanner
+          message={bannerError}
+          actionLabel="Thử lại"
+          onActionPress={fetchItems}
+        />
+      ) : null}
+
+      {items.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.emptyText}>Bạn chưa đăng bán sản phẩm nào</Text>
         </View>
@@ -272,10 +261,6 @@ const styles = StyleSheet.create({
   },
   statusDeleted: {
     color: "#9e9e9e",
-  },
-  errorText: {
-    fontSize: 13,
-    color: "red",
   },
   emptyText: {
     fontSize: 13,

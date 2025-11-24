@@ -14,7 +14,14 @@ import Icon from "react-native-vector-icons/Ionicons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import colors from "../config/color";
 import { useAuth } from "../context/AuthContext";
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { orderApi } from "../api/orderApi";
+import type {
+  OrderFilterStatus,
+  OrderStatus,
+  SellerOrderListEntry,
+} from "../types/Order";
+import type { ApiClientError } from "../api/axiosClient";
+import { InlineErrorBanner } from "../components/InlineErrorBanner";
 
 const statusLabelMap: Record<string, string> = {
   PENDING: "Chờ xác nhận",
@@ -32,77 +39,58 @@ const statusColorMap: Record<string, string> = {
   CANCELLED: "#ef4444",
 };
 
-interface SellerOrderItem {
-  order: {
-    _id: string;
-    status: string;
-    createdAt: string;
-    priceAtPurchase: number;
-  };
-  item: {
-    _id: string;
-    title: string;
-    images?: string[];
-  } | null;
-  buyer: {
-    _id: string;
-    fullName: string;
-  } | null;
-}
-
 export default function SellerOrdersScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
-  const [orders, setOrders] = useState<SellerOrderItem[]>([]);
+  const [orders, setOrders] = useState<SellerOrderListEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [filterStatus, setFilterStatus] = useState<"ALL" | string>("ALL");
+  const [filterStatus, setFilterStatus] = useState<OrderFilterStatus>("ALL");
+  const [debouncedFilter, setDebouncedFilter] = useState<OrderFilterStatus>("ALL");
+  const [bannerError, setBannerError] = useState<string | null>(null);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
-  const fetchOrders = async () => {
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedFilter(filterStatus), 300);
+    return () => clearTimeout(timer);
+  }, [filterStatus]);
+
+  const fetchOrders = useCallback(async () => {
     if (!user?.id) {
-      setError("Chưa đăng nhập");
+      setOrders([]);
+      setBannerError("Bạn cần đăng nhập để xem đơn bán.");
       setLoading(false);
       setRefreshing(false);
       return;
     }
 
+    setLoading(true);
     try {
-      setError(null);
-      const query =
-        filterStatus && filterStatus !== "ALL"
-          ? `?status=${encodeURIComponent(filterStatus)}`
-          : "";
-      const res = await fetch(
-        `${API_URL}/orders/seller/${user.id}${query}`
-      );
-      const text = await res.text();
-      console.log("Get seller orders", res.status, text);
-      let data: any;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        setError("Phản hồi không phải JSON");
-        return;
+      setBannerError(null);
+      const data = await orderApi.getSellerOrders({
+        userId: user.id,
+        status: debouncedFilter,
+      });
+      setOrders(data);
+    } catch (error) {
+      const apiError = error as ApiClientError;
+      const message =
+        apiError?.message || "Không thể tải đơn bán, vui lòng thử lại.";
+      setBannerError(message);
+      if (apiError?.status === 401) {
+        navigation.navigate("Auth", { screen: "Login" });
       }
-      if (!res.ok) {
-        setError(data?.error || "Không thể lấy đơn bán");
-        return;
-      }
-      setOrders(data.orders || []);
-    } catch (e) {
-      console.error("Get seller orders error", e);
-      setError("Lỗi mạng");
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setHasLoadedOnce(true);
     }
-  };
+  }, [user?.id, debouncedFilter, navigation]);
 
   useFocusEffect(
     useCallback(() => {
       fetchOrders();
-    }, [filterStatus])
+    }, [fetchOrders])
   );
 
   const onRefresh = () => {
@@ -110,26 +98,21 @@ export default function SellerOrdersScreen() {
     fetchOrders();
   };
 
-  const handleUpdateStatus = async (orderId: string, status: string) => {
+  const handleUpdateStatus = async (orderId: string, status: OrderStatus) => {
     try {
-      const res = await fetch(
-        `${API_URL}/orders/${orderId}/status`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status }),
-        }
-      );
-      const data = await res.json();
-      console.log("Update order status", res.status, data);
-      if (!res.ok) return;
+      await orderApi.updateStatus(orderId, status);
       fetchOrders();
-    } catch (e) {
-      console.error("Update status error", e);
+    } catch (error) {
+      const apiError = error as ApiClientError;
+      const message = apiError?.message || "Cập nhật trạng thái thất bại.";
+      setBannerError(message);
+      if (apiError?.status === 401) {
+        navigation.navigate("Auth", { screen: "Login" });
+      }
     }
   };
 
-  const renderOrder = ({ item }: { item: SellerOrderItem }) => {
+  const renderOrder = ({ item }: { item: SellerOrderListEntry }) => {
     const { order, buyer } = item;
     const firstImage = item.item?.images?.[0];
     const statusLabel = statusLabelMap[order.status] || order.status;
@@ -158,7 +141,9 @@ export default function SellerOrdersScreen() {
             <Text style={styles.title} numberOfLines={1}>
               {item.item?.title || "(Sản phẩm đã xóa)"}
             </Text>
-            <Text style={styles.price}>{order.priceAtPurchase} đ</Text>
+            <Text style={styles.price}>
+              {order.priceAtPurchase.toLocaleString("vi-VN")} đ
+            </Text>
             <Text style={styles.buyerText}>
               Người mua: {buyer?.fullName || buyer?._id || "Không rõ"}
             </Text>
@@ -208,7 +193,7 @@ export default function SellerOrdersScreen() {
     );
   };
 
-  const filters: { key: "ALL" | string; label: string }[] = [
+  const filters: { key: OrderFilterStatus; label: string }[] = [
     { key: "ALL", label: "Tất cả" },
     { key: "PENDING", label: "Chờ xác nhận" },
     { key: "MEETUP_SCHEDULED", label: "Đã hẹn" },
@@ -216,7 +201,7 @@ export default function SellerOrdersScreen() {
     { key: "CANCELLED", label: "Đã hủy" },
   ];
 
-  if (loading) {
+  if (loading && !hasLoadedOnce) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.primary} />
@@ -262,11 +247,15 @@ export default function SellerOrdersScreen() {
         />
       </View>
 
-      {error ? (
-        <View style={styles.center}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      ) : orders.length === 0 ? (
+      {bannerError ? (
+        <InlineErrorBanner
+          message={bannerError}
+          actionLabel="Thử lại"
+          onActionPress={fetchOrders}
+        />
+      ) : null}
+
+      {orders.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.emptyText}>Chưa có đơn bán nào</Text>
         </View>
@@ -435,10 +424,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: colors.text,
-  },
-  errorText: {
-    fontSize: 13,
-    color: "red",
   },
   emptyText: {
     fontSize: 13,

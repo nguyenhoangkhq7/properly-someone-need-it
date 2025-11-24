@@ -148,7 +148,7 @@ export default function ShopScreen({ route }: Props) {
 
     setCheckingEligibility(true);
     try {
-      const data = await checkReviewEligibility(sellerId, accessToken);
+      const data = await checkReviewEligibility(sellerId);
       setEligibility(data);
     } catch (error) {
       setEligibility({
@@ -298,15 +298,12 @@ export default function ShopScreen({ route }: Props) {
         );
       }
 
-      await createShopReview(
-        {
-          sellerId,
-          rating: ratingInput,
-          comment: commentInput.trim() || undefined,
-          images: uploadedUrls,
-        },
-        accessToken
-      );
+      await createShopReview({
+        sellerId,
+        rating: ratingInput,
+        comment: commentInput.trim() || undefined,
+        images: uploadedUrls,
+      });
 
       await loadReviews();
       await refreshEligibility();

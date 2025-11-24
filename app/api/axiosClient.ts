@@ -32,6 +32,11 @@ interface RetryableRequestConfig extends AxiosRequestConfig {
   _retry?: boolean;
 }
 
+interface RefreshResponsePayload {
+  accessToken: string;
+  refreshToken?: string | null;
+}
+
 const API_BASE_URL = getApiBaseUrl();
 
 const api: AxiosInstance = axios.create({
@@ -85,13 +90,18 @@ const performRefresh = async (): Promise<string | null> => {
     return null;
   }
 
-  const response: AxiosResponse<ApiResponse<{ accessToken: string }>> =
+  const response: AxiosResponse<ApiResponse<RefreshResponsePayload>> =
     await refreshClient.post("/auth/refresh-token", {
       refreshToken,
     });
 
-  const newAccessToken = response.data.data.accessToken;
-  await persistTokens({ accessToken: newAccessToken });
+  const { accessToken: newAccessToken, refreshToken: newRefreshToken } =
+    response.data.data;
+  await persistTokens({
+    accessToken: newAccessToken,
+    refreshToken:
+      typeof newRefreshToken === "string" ? newRefreshToken : refreshToken,
+  });
   return newAccessToken;
 };
 

@@ -11,6 +11,7 @@ import {
   Dimensions,
   FlatList,
   Alert,
+  ActivityIndicator,
   Share,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context"; // Dùng cái này thay cho View thường để tránh tai thỏ
@@ -29,11 +30,10 @@ import {
   getLocationLabelAsync,
 } from "../utils/locationLabel";
 import { getUserLatLng, haversineKm, roundDistanceKm } from "../utils/distance";
-import { apiClient } from "../api/apiWrapper";
+import api, { type ApiClientError, type ApiResponse } from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import { chatApi, type ChatRoomSummary } from "../api/chatApi";
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { orderApi } from "../api/orderApi";
 
 const { width } = Dimensions.get("window");
 
@@ -91,6 +91,8 @@ export default function ProductDetailScreen() {
   const [distance, setDistance] = useState<number | null>(
     (initialProduct as any).distanceKm ?? null
   );
+  const [isBuying, setIsBuying] = useState(false);
+  const [isOpeningChat, setIsOpeningChat] = useState(false);
 
   const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL || "https://playvault.vn";
 
@@ -101,45 +103,39 @@ export default function ProductDetailScreen() {
 
     const loadData = async () => {
       try {
-        // A. CHUẨN BỊ CÁC PROMISE
-
-        // 1. Lấy thông tin sản phẩm
-        const productPromise = productApi
+        const freshProduct = await productApi
           .getById(initialProduct._id, user?.id)
           .catch((err) => {
             console.warn("Lỗi lấy chi tiết sản phẩm:", err);
             return null;
           });
 
-        // 2. Lấy thông tin Người bán (SỬA LỖI Ở ĐÂY)
-        // CẬP NHẬT: Thêm "/profile" vào cuối đường dẫn cho khớp với API Backend
-        const sellerPromise = apiClient
-          .get<SellerInfo>(`/users/${initialProduct.sellerId}/profile`)
-          .catch((err) => {
-            console.warn("Lỗi lấy thông tin seller:", err);
-            return null;
-          });
-
-        // B. THỰC THI
-        const [freshProduct, sellerData] = await Promise.all([
-          productPromise,
-          sellerPromise,
-        ]);
-
         if (!mounted) return;
 
-        // C. CẬP NHẬT STATE
         if (freshProduct) {
           setProduct(freshProduct);
         }
 
-        if (sellerData) {
-          setSeller(sellerData as SellerInfo);
-        }
-
-        // D. LẤY SẢN PHẨM KHÁC (RELATED)
         const currentSellerId =
           freshProduct?.sellerId || initialProduct.sellerId;
+
+        if (currentSellerId) {
+          try {
+            const sellerResponse = await api.get<ApiResponse<SellerInfo>>(
+              `/users/${currentSellerId}/profile`
+            );
+            if (mounted) {
+              setSeller(sellerResponse.data.data as SellerInfo);
+            }
+          } catch (err) {
+            console.warn("Lỗi lấy thông tin seller:", err);
+          }
+        } else {
+          console.warn("Không có sellerId để tải thông tin người bán");
+          if (mounted) {
+            setSeller(null);
+          }
+        }
 
         if (currentSellerId) {
           try {
@@ -240,20 +236,47 @@ export default function ProductDetailScreen() {
 
     let room: ChatRoomSummary | null = null;
     try {
+      setIsOpeningChat(true);
       room = await chatApi.initiateChat(product.sellerId);
+      if (!room?.roomId) {
+        throw new Error("Không nhận được phòng chat hợp lệ");
+      }
+
+      const productSummaryLines = [
+        preset || "Chào bạn, mình quan tâm sản phẩm này.",
+        `Sản phẩm: ${product.title}`,
+        `Giá: ${product.price.toLocaleString("vi-VN")} đ`,
+        `Mã sản phẩm: ${product._id}`,
+      ];
+
+      await chatApi.sendMessage(room.roomId, productSummaryLines.join("\n"));
     } catch (error: any) {
       const message =
         error?.message ?? "Không mở được phòng chat, thử lại sau.";
       Alert.alert("Không thể mở chat", message);
+      setIsOpeningChat(false);
       return;
     }
+
+    const roomWithItem: ChatRoomSummary = {
+      ...room,
+      item:
+        room.item ?? {
+          id: product._id,
+          title: product.title,
+          thumbnail: product.images?.[0] || null,
+          price: product.price,
+        },
+    };
+
+    setIsOpeningChat(false);
 
     // --- ĐOẠN CODE QUAN TRỌNG CẦN SỬA ---
 
     // Sử dụng initial: false để chèn ChatList xuống dưới ChatRoom
     navigation.navigate("Chat", {
       screen: "ChatRoom",
-      params: { room, prefillMessage: preset },
+      params: { room: roomWithItem },
       initial: false, // <--- THÊM DÒNG NÀY: Phép thuật nằm ở đây
     });
   };
@@ -269,42 +292,39 @@ export default function ProductDetailScreen() {
   };
 
   // Hàm chọn mua ngay (Phúc Vinh)
-  const createOrder = async () => {
+  const handleBuyNow = async () => {
+    if (!product?._id) {
+      Alert.alert("Không thể mua", "Thiếu mã sản phẩm");
+      return;
+    }
+
+    if (!user || !accessToken) {
+      navigation.navigate("Auth", { screen: "Login" });
+      return;
+    }
+
+    if (user.id === product.sellerId) {
+      Alert.alert("Thông báo", "Bạn không thể mua sản phẩm của chính mình");
+      return;
+    }
+
     try {
-      // setIsBuying(true);
-
-      // Tạm thời dùng cứng một _id item thật trong Mongo để test mua hàng
-      const itemId = product?._id;
-
-      if (!accessToken) {
-        // Nếu chưa đăng nhập, chuyển tới màn Login
-        navigation.navigate("Auth", { screen: "Login" });
-        return;
-      }
-
-      const res = await fetch(`${API_URL}/orders`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ itemId }),
-      });
-      const data = await res.json();
-      console.log("Create order response", res.status, data);
-
-      if (!res.ok) {
-        return;
-      }
-
-      const order = data.order;
+      setIsBuying(true);
+      const order = await orderApi.create({ itemId: product._id });
       navigation.navigate("OrderDetail", {
         orderId: order._id,
       });
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      const apiError = error as ApiClientError;
+      const message =
+        apiError?.message ?? "Không thể tạo đơn hàng, vui lòng thử lại.";
+      Alert.alert("Mua hàng thất bại", message);
+
+      if (apiError?.status === 401) {
+        navigation.navigate("Auth", { screen: "Login" });
+      }
     } finally {
-      // setIsBuying(false);
+      setIsBuying(false);
     }
   };
 
@@ -569,32 +589,47 @@ export default function ProductDetailScreen() {
       {/* Bottom Action Bar */}
       <View style={styles.bottomBar}>
         <TouchableOpacity
-          style={styles.chatBtn} // Style mới
+          style={[styles.chatBtn, isOpeningChat && styles.chatBtnDisabled]}
           onPress={() =>
             handleMessagePress("Mình muốn hỏi thêm về sản phẩm này")
           }
           activeOpacity={0.7}
+          disabled={isOpeningChat}
         >
-          <Icon
-            name="chatbubble-ellipses-outline"
-            size={22}
-            color={colors.primary}
-          />
+          {isOpeningChat ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Icon
+              name="chatbubble-ellipses-outline"
+              size={22}
+              color={colors.primary}
+            />
+          )}
           <Text style={styles.chatBtnText}>Chat ngay</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.buyBtn}
-          onPress={() => handleBuyNow()}
+          style={[styles.buyBtn, isBuying && styles.buyBtnDisabled]}
+          onPress={handleBuyNow}
           activeOpacity={0.8}
+          disabled={isBuying}
         >
-          <Text style={styles.buyBtnText}>MUA NGAY</Text>
-          <Icon
-            name="arrow-forward"
-            size={20}
-            color="#000"
-            style={{ marginLeft: 4 }}
-          />
+          {isBuying ? (
+            <View style={styles.buyBtnLoading}>
+              <ActivityIndicator size="small" color="#000" />
+              <Text style={styles.buyBtnText}>ĐANG XỬ LÝ...</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.buyBtnText}>MUA NGAY</Text>
+              <Icon
+                name="arrow-forward"
+                size={20}
+                color="#000"
+                style={{ marginLeft: 4 }}
+              />
+            </>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -807,6 +842,9 @@ const styles = StyleSheet.create({
     borderRadius: 12, // Bo tròn hiện đại hơn
     height: 50, // Tăng chiều cao một chút cho dễ bấm
   },
+  chatBtnDisabled: {
+    opacity: 0.6,
+  },
   chatBtnText: {
     color: colors.primary, // Chữ màu vàng
     fontWeight: "700",
@@ -828,6 +866,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 6,
     elevation: 4,
+  },
+  buyBtnDisabled: {
+    opacity: 0.7,
+  },
+  buyBtnLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   buyBtnText: {
     color: "#000000", // QUAN TRỌNG: Chữ màu ĐEN trên nền vàng để dễ đọc nhất

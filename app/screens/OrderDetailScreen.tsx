@@ -14,6 +14,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/Ionicons";
 import colors from "../config/color";
 import { useAuth } from "../context/AuthContext";
+import { orderApi } from "../api/orderApi";
+import type {
+  Order,
+  OrderPartySummary,
+  OrderStatus,
+} from "../types/Order";
+import type { Item } from "../types/Item";
+import type { ApiClientError } from "../api/axiosClient";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -55,8 +63,8 @@ export default function OrderDetailScreen() {
 
   const [order, setOrder] = useState<Order | null>(null);
   const [item, setItem] = useState<Item | null>(null);
-  const [buyer, setBuyer] = useState<UserSummary | null>(null);
-  const [seller, setSeller] = useState<UserSummary | null>(null);
+  const [buyer, setBuyer] = useState<OrderPartySummary | null>(null);
+  const [seller, setSeller] = useState<OrderPartySummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
@@ -70,38 +78,38 @@ export default function OrderDetailScreen() {
         return;
       }
 
+      if (!accessToken) {
+        setError("Bạn cần đăng nhập để xem đơn hàng");
+        setLoading(false);
+        navigation.navigate("Auth", { screen: "Login" });
+        return;
+      }
+
       try {
-        const res = await fetch(`${API_URL}/orders/${orderId}`);
-        const text = await res.text();
-        // console.log("Get order raw response", res.status, text);
+        setLoading(true);
+        setError(null);
 
-        let data: any;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          setError("Phản hồi không phải JSON");
-          setLoading(false);
-          return;
-        }
-
-        if (!res.ok) {
-          setError(data?.error || "Không thể tải đơn hàng");
-        } else {
-          setOrder(data.order);
-          setItem(data.item || null);
-          setBuyer(data.buyer || null);
-          setSeller(data.seller || null);
-        }
+        const data = await orderApi.getById(orderId);
+        setOrder(data.order);
+        setItem(data.item);
+        setBuyer(data.buyer);
+        setSeller(data.seller);
       } catch (e) {
-        console.error("Fetch order error", e);
-        setError("Lỗi mạng");
+        const apiError = e as ApiClientError;
+        const message =
+          apiError?.message || "Không thể tải đơn hàng, vui lòng thử lại.";
+        setError(message);
+
+        if (apiError?.status === 401) {
+          navigation.navigate("Auth", { screen: "Login" });
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchOrder();
-  }, [orderId]);
+  }, [orderId, accessToken, navigation]);
 
   useEffect(() => {
     const fetchAddress = async () => {
@@ -156,7 +164,7 @@ export default function OrderDetailScreen() {
     );
   }
 
-  const statusLabelMap: Record<string, string> = {
+  const statusLabelMap: Record<OrderStatus, string> = {
     PENDING: "Chờ xác nhận",
     NEGOTIATING: "Đang thương lượng",
     MEETUP_SCHEDULED: "Đã hẹn giao dịch",
@@ -164,7 +172,7 @@ export default function OrderDetailScreen() {
     CANCELLED: "Đã hủy",
   };
 
-  const statusColorMap: Record<string, string> = {
+  const statusColorMap: Record<OrderStatus, string> = {
     PENDING: "#f97316",
     NEGOTIATING: "#0ea5e9",
     MEETUP_SCHEDULED: "#22c55e",

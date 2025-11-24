@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, Image } from "react-native";
 import { Text } from "react-native-paper";
 import colors from "../../config/color";
 import type { AuthUser } from "../../context/AuthContext";
@@ -31,7 +31,11 @@ export default function ProfileHeader({ user }: ProfileHeaderProps) {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials}</Text>
+            {user?.avatar ? (
+              <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>{initials}</Text>
+            )}
           </View>
           <View style={styles.userInfo}>
             <Text style={styles.name}>{fullName}</Text>
@@ -80,6 +84,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 16,
     position: "relative",
+    overflow: "hidden",
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
   },
   avatarText: { fontSize: 28, fontWeight: "bold", color: finalColors.background },
   userInfo: {
