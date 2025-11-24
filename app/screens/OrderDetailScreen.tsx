@@ -7,6 +7,7 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
+  Alert,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -22,6 +23,38 @@ import type {
 import type { Item } from "../types/Item";
 import type { ApiClientError } from "../api/axiosClient";
 
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+interface Order {
+  _id: string;
+  buyerId: string;
+  sellerId: string;
+  itemId: string;
+  priceAtPurchase: number;
+  status: string;
+  createdAt: string;
+  meetupLocation?: {
+    location?: {
+      type: string;
+      coordinates: number[]; // [lng, lat]
+    };
+    address?: string;
+  };
+  meetupTime?: string;
+}
+
+interface Item {
+  _id: string;
+  title: string;
+  price: number;
+  images?: string[];
+}
+
+interface UserSummary {
+  _id: string;
+  fullName: string;
+}
+
 export default function OrderDetailScreen() {
   const route = useRoute<any>();
   const { orderId } = route.params || {};
@@ -35,6 +68,7 @@ export default function OrderDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
+  const [canceling, setCanceling] = useState(false);
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -154,6 +188,47 @@ export default function OrderDetailScreen() {
   const coords = order.meetupLocation?.location?.coordinates || [];
   const hasCoords = coords.length === 2;
 
+  const handleCancelOrder = () => {
+    Alert.alert(
+      "Hủy đơn mua",
+      "Bạn chắc chắn muốn hủy đơn hàng này?",
+      [
+        { text: "Không", style: "cancel" },
+        {
+          text: "Hủy đơn",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setCanceling(true);
+              const res = await fetch(`${API_URL}/orders/${order._id}/status`, {
+                method: "PATCH",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+                },
+                body: JSON.stringify({ status: "CANCELLED" }),
+              });
+              const data = await res.json();
+              console.log("Cancel order", res.status, data);
+              if (!res.ok) {
+                Alert.alert("Không hủy được", data?.error || "Có lỗi xảy ra");
+                return;
+              }
+              setOrder((prev) => (prev ? { ...prev, status: "CANCELLED" } : prev));
+            } catch (e) {
+              Alert.alert("Không hủy được", "Lỗi mạng, thử lại sau.");
+            } finally {
+              setCanceling(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const canCancel =
+    order.status !== "CANCELLED" && order.status !== "COMPLETED";
+
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* Header with back button */}
@@ -246,6 +321,18 @@ export default function OrderDetailScreen() {
             </Text>
           </View>
         </View>
+
+        {canCancel && (
+          <TouchableOpacity
+            style={[styles.cancelButton, canceling && { opacity: 0.6 }]}
+            onPress={handleCancelOrder}
+            disabled={canceling}
+          >
+            <Text style={styles.cancelText}>
+              {canceling ? "Đang hủy..." : "HỦY ĐƠN MUA"}
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -378,5 +465,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  cancelButton: {
+    marginTop: 4,
+    marginBottom: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: colors.red,
+    alignItems: "center",
+  },
+  cancelText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
   },
 });

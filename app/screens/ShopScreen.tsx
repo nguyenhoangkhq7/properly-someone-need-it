@@ -17,7 +17,6 @@ import {
 } from "react-native";
 import colors from "../config/color";
 import Icon from "react-native-vector-icons/Ionicons";
-import MaterialIcon from "react-native-vector-icons/MaterialCommunityIcons";
 import { RouteProp, useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import ProductItem from "../components/ProductItem"; // component dùng chung
@@ -37,23 +36,9 @@ import { uploadMultipleImages } from "../utils/imageUpload";
 const { width } = Dimensions.get("window");
 const PRODUCT_CARD_WIDTH = (width - 40) / 3 - 10;
 const STAR_COLOR = colors.accent;
-const OUTLINE_BUTTON_COLOR = colors.primary;
 
 type ShopScreenRouteProp = RouteProp<HomeStackParamList, "ShopScreen">;
 type Props = { route: ShopScreenRouteProp };
-
-// Component Nút Viền
-const OutlineButton = ({
-  text,
-  onPress,
-}: {
-  text: string;
-  onPress?: () => void;
-}) => (
-  <TouchableOpacity style={styles.outlineButton} onPress={onPress}>
-    <Text style={styles.outlineButtonText}>{text}</Text>
-  </TouchableOpacity>
-);
 
 const MAX_REVIEW_IMAGES = 3;
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -81,10 +66,16 @@ export default function ShopScreen({ route }: Props) {
   const sellerId =
     shop?.ownerId ?? shop?.sellerId ?? shop?._id ?? shop?.id ?? null;
   const coverImageUri =
-    shop?.coverImage || shop?.banner || shop?.avatar || "https://placehold.co/600x250/11120F/F6FF00?text=Cover";
+    shop?.coverImage ||
+    shop?.banner ||
+    shop?.avatar ||
+    "https://placehold.co/600x250/11120F/F6FF00?text=Cover";
 
   const [reviews, setReviews] = useState<ShopReview[]>([]);
-  const [stats, setStats] = useState<ReviewStats>({ total: 0, averageRating: 0 });
+  const [stats, setStats] = useState<ReviewStats>({
+    total: 0,
+    averageRating: 0,
+  });
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -94,9 +85,13 @@ export default function ShopScreen({ route }: Props) {
   const [sellerItems, setSellerItems] = useState<Item[]>([]);
   const [loadingSellerItems, setLoadingSellerItems] = useState(false);
   const [sellerItemsError, setSellerItemsError] = useState<string | null>(null);
-  const [eligibility, setEligibility] = useState<EligibilityState>({ eligible: false });
+  const [eligibility, setEligibility] = useState<EligibilityState>({
+    eligible: false,
+  });
   const [checkingEligibility, setCheckingEligibility] = useState(false);
-  const [selectedReviewImages, setSelectedReviewImages] = useState<LocalReviewImage[]>([]);
+  const [selectedReviewImages, setSelectedReviewImages] = useState<
+    LocalReviewImage[]
+  >([]);
 
   const averageRatingLabel = useMemo(() => {
     return stats.averageRating ? stats.averageRating.toFixed(1) : "0.0";
@@ -136,12 +131,18 @@ export default function ShopScreen({ route }: Props) {
 
   const refreshEligibility = useCallback(async () => {
     if (!sellerId) {
-      setEligibility({ eligible: false, reason: "Không xác định được người bán." });
+      setEligibility({
+        eligible: false,
+        reason: "Không xác định được người bán.",
+      });
       return;
     }
 
     if (!accessToken) {
-      setEligibility({ eligible: false, reason: "Đăng nhập để viết đánh giá." });
+      setEligibility({
+        eligible: false,
+        reason: "Đăng nhập để viết đánh giá.",
+      });
       return;
     }
 
@@ -152,7 +153,8 @@ export default function ShopScreen({ route }: Props) {
     } catch (error) {
       setEligibility({
         eligible: false,
-        reason: (error as Error).message || "Không kiểm tra được quyền đánh giá.",
+        reason:
+          (error as Error).message || "Không kiểm tra được quyền đánh giá.",
       });
     } finally {
       setCheckingEligibility(false);
@@ -173,7 +175,9 @@ export default function ShopScreen({ route }: Props) {
     setLoadingSellerItems(true);
     try {
       const allItems = await productApi.getAll();
-      const filtered = (allItems || []).filter((item) => item.sellerId === sellerId);
+      const filtered = (allItems || []).filter(
+        (item) => item.sellerId === sellerId
+      );
       setSellerItems(filtered);
       setSellerItemsError(null);
     } catch (error) {
@@ -218,7 +222,10 @@ export default function ShopScreen({ route }: Props) {
   const handlePickImages = useCallback(async () => {
     const remainingSlots = MAX_REVIEW_IMAGES - selectedReviewImages.length;
     if (remainingSlots <= 0) {
-      Alert.alert("Giới hạn ảnh", `Bạn chỉ có thể chọn tối đa ${MAX_REVIEW_IMAGES} ảnh.`);
+      Alert.alert(
+        "Giới hạn ảnh",
+        `Bạn chỉ có thể chọn tối đa ${MAX_REVIEW_IMAGES} ảnh.`
+      );
       return;
     }
 
@@ -258,10 +265,7 @@ export default function ShopScreen({ route }: Props) {
     });
 
     if (rejected.length) {
-      Alert.alert(
-        "Ảnh vượt quá 5MB",
-        `Đã bỏ qua: ${rejected.join(", ")}`
-      );
+      Alert.alert("Ảnh vượt quá 5MB", `Đã bỏ qua: ${rejected.join(", ")}`);
     }
 
     if (!accepted.length) {
@@ -335,7 +339,10 @@ export default function ShopScreen({ route }: Props) {
         <View style={styles.reviewHeader}>
           <View style={styles.reviewAvatar}>
             {item.reviewerId?.avatar ? (
-              <Image source={{ uri: item.reviewerId.avatar }} style={styles.reviewAvatarImage} />
+              <Image
+                source={{ uri: item.reviewerId.avatar }}
+                style={styles.reviewAvatarImage}
+              />
             ) : (
               <Text style={styles.reviewAvatarText}>
                 {reviewerName.charAt(0).toUpperCase()}
@@ -350,18 +357,26 @@ export default function ShopScreen({ route }: Props) {
                   key={value}
                   name={value <= item.rating ? "star" : "star-outline"}
                   size={14}
-                  color={value <= item.rating ? STAR_COLOR : colors.textSecondary}
+                  color={
+                    value <= item.rating ? STAR_COLOR : colors.textSecondary
+                  }
                 />
               ))}
             </View>
           </View>
           <Text style={styles.reviewDate}>{formattedDate}</Text>
         </View>
-        {item.comment ? <Text style={styles.reviewComment}>{item.comment}</Text> : null}
+        {item.comment ? (
+          <Text style={styles.reviewComment}>{item.comment}</Text>
+        ) : null}
         {item.images && item.images.length ? (
           <View style={styles.reviewImagesRow}>
             {item.images.map((uri) => (
-              <Image key={uri} source={{ uri }} style={styles.reviewImageThumb} />
+              <Image
+                key={uri}
+                source={{ uri }}
+                style={styles.reviewImageThumb}
+              />
             ))}
           </View>
         ) : null}
@@ -371,7 +386,12 @@ export default function ShopScreen({ route }: Props) {
 
   const reviewList = useMemo(() => {
     if (loadingReviews) {
-      return <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />;
+      return (
+        <ActivityIndicator
+          color={colors.primary}
+          style={{ marginVertical: 16 }}
+        />
+      );
     }
 
     if (reviewsError) {
@@ -379,7 +399,9 @@ export default function ShopScreen({ route }: Props) {
     }
 
     if (!reviews.length) {
-      return <Text style={styles.emptyText}>Chưa có đánh giá nào cho shop này.</Text>;
+      return (
+        <Text style={styles.emptyText}>Chưa có đánh giá nào cho shop này.</Text>
+      );
     }
 
     return (
@@ -412,67 +434,81 @@ export default function ShopScreen({ route }: Props) {
       <StatusBar barStyle="light-content" />
 
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerButton} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={() => navigation.goBack()}
+        >
           <Icon name="chevron-back" size={28} color={colors.text} />
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        <ImageBackground source={{ uri: coverImageUri }} style={styles.coverImage} />
+        <ImageBackground
+          source={{ uri: coverImageUri }}
+          style={styles.coverImage}
+        />
 
         <View style={styles.mainContent}>
           <View style={styles.shopInfoCard}>
-              <Image source={{ uri: shopAvatar }} style={styles.shopAvatar} />
-              <Text style={styles.shopName}>{shopDisplayName}</Text>
-              <Text style={styles.shopStats}>
-                {shopTotalProducts} Sản phẩm • {shopSold} Đã bán
-              </Text>
+            <Image source={{ uri: shopAvatar }} style={styles.shopAvatar} />
+            <Text style={styles.shopName}>{shopDisplayName}</Text>
+            <Text style={styles.shopStats}>
+              {shopTotalProducts} Sản phẩm • {shopSold} Đã bán
+            </Text>
             <View style={styles.shopStars}>
               {[...Array(5)].map((_, i) => (
                 <Icon
                   key={i}
-                    name={i + 1 <= shopRatingValue ? "star" : "star-outline"}
+                  name={i + 1 <= shopRatingValue ? "star" : "star-outline"}
                   size={16}
-                    color={i + 1 <= shopRatingValue ? STAR_COLOR : colors.border}
+                  color={i + 1 <= shopRatingValue ? STAR_COLOR : colors.border}
                 />
               ))}
-                <Text style={styles.shopRatingText}>
-                  ({shopRatingValue.toFixed(1)}/5)
-                </Text>
+              <Text style={styles.shopRatingText}>
+                ({shopRatingValue.toFixed(1)}/5)
+              </Text>
             </View>
           </View>
 
-          <View style={styles.badgeContainer}>
-            <View style={styles.badge}>
-              <MaterialIcon name="message-reply-text-outline" size={24} color={colors.textSecondary} />
+          {/* badges removed */}
+            {/* <View style={styles.badge}>
+              <MaterialIcon
+                name="message-reply-text-outline"
+                size={24}
+                color={colors.textSecondary}
+              />
               <Text style={styles.badgeText}>Phản hồi nhanh</Text>
             </View>
             <View style={styles.badge}>
-              <MaterialIcon name="truck-fast-outline" size={24} color={colors.textSecondary} />
+              <MaterialIcon
+                name="truck-fast-outline"
+                size={24}
+                color={colors.textSecondary}
+              />
               <Text style={styles.badgeText}>Gửi nhanh</Text>
             </View>
             <View style={styles.badge}>
-              <MaterialIcon name="shield-check-outline" size={24} color={colors.textSecondary} />
+              <MaterialIcon
+                name="shield-check-outline"
+                size={24}
+                color={colors.textSecondary}
+              />
               <Text style={styles.badgeText}>Đáng tin cậy</Text>
             </View>
-          </View>
-
-          <OutlineButton
-            onPress={() => navigation.navigate("HomeStack", { screen: "SearchResults" })}
-            text={`XEM TẤT CẢ SẢN PHẨM (${shop.totalProducts})`}
-          />
+          </View> */}
         </View>
 
         <View style={styles.divider} />
 
-        <View style={styles.section}>
+        {/* <View style={styles.section}>
           <Text style={styles.sectionTitle}>Về Tuấn Phú</Text>
           <Text style={styles.descriptionText}>
-            "Mình không muốn những món đồ còn giá trị phải nằm yên. Nếu nó có thể phục vụ cho người khác, thì..."
+            "Mình không muốn những món đồ còn giá trị phải nằm yên. Nếu nó có
+            thể phục vụ cho người khác, thì..."
           </Text>
         </View>
 
-        <View style={styles.divider} />
+        <View style={styles.divider} /> */}
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -510,13 +546,20 @@ export default function ShopScreen({ route }: Props) {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Sản phẩm từ người bán này</Text>
-            <TouchableOpacity onPress={() => navigation.navigate("HomeStack", { screen: "SearchResults" })}>
+            <TouchableOpacity
+              onPress={() =>
+                navigation.navigate("HomeStack", { screen: "SearchResults" })
+              }
+            >
               <Text style={styles.seeAllText}>Xem tất cả</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.productGrid}>
             {loadingSellerItems ? (
-              <ActivityIndicator color={colors.primary} style={{ marginVertical: 12 }} />
+              <ActivityIndicator
+                color={colors.primary}
+                style={{ marginVertical: 12 }}
+              />
             ) : sellerItemsError ? (
               <Text style={styles.errorText}>{sellerItemsError}</Text>
             ) : sellerItems.length === 0 ? (
@@ -524,7 +567,9 @@ export default function ShopScreen({ route }: Props) {
             ) : (
               <FlatList
                 data={sellerItems}
-                renderItem={({ item }) => <ProductItem product={item} horizontal />}
+                renderItem={({ item }) => (
+                  <ProductItem product={item} horizontal />
+                )}
                 keyExtractor={(item) => item._id}
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -532,10 +577,6 @@ export default function ShopScreen({ route }: Props) {
               />
             )}
           </View>
-          <OutlineButton
-            text="XEM THEM SAN PHAM"
-            onPress={() => navigation.navigate("HomeStack", { screen: "SearchResults" })}
-          />
         </View>
         <View style={{ height: 50 }} />
       </ScrollView>
@@ -565,7 +606,10 @@ export default function ShopScreen({ route }: Props) {
               {selectedReviewImages.length ? (
                 selectedReviewImages.map((img) => (
                   <View key={img.uri} style={styles.selectedImageWrapper}>
-                    <Image source={{ uri: img.uri }} style={styles.selectedImage} />
+                    <Image
+                      source={{ uri: img.uri }}
+                      style={styles.selectedImage}
+                    />
                     <TouchableOpacity
                       style={styles.removeImageButton}
                       onPress={() => handleRemoveImage(img.uri)}
@@ -575,7 +619,9 @@ export default function ShopScreen({ route }: Props) {
                   </View>
                 ))
               ) : (
-                <Text style={styles.imagePlaceholderText}>Chưa chọn ảnh nào</Text>
+                <Text style={styles.imagePlaceholderText}>
+                  Chưa chọn ảnh nào
+                </Text>
               )}
             </View>
             <View style={styles.modalActions}>
@@ -591,7 +637,12 @@ export default function ShopScreen({ route }: Props) {
                 onPress={handleSubmitReview}
                 disabled={isSubmitting}
               >
-                <Text style={[styles.modalButtonText, styles.modalButtonTextPrimary]}>
+                <Text
+                  style={[
+                    styles.modalButtonText,
+                    styles.modalButtonTextPrimary,
+                  ]}
+                >
                   {isSubmitting ? "Đang gửi..." : "Gửi đánh giá"}
                 </Text>
               </TouchableOpacity>
@@ -614,13 +665,13 @@ const styles = StyleSheet.create({
   // Header
   header: {
     position: "absolute",
-    top: StatusBar.currentHeight || 0,
+    top: (StatusBar.currentHeight || 0) + 24,
     left: 0,
     zIndex: 10,
   },
   headerButton: {
     padding: 10,
-    backgroundColor: "rgba(0,0,0,0.3)", // Nền mờ
+    backgroundColor: "rgba(0,0,0,0.55)", // Nền đậm hơn cho dễ nhìn
     borderRadius: 20,
     margin: 10,
   },
@@ -678,36 +729,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: 8,
   },
-  // Badges
-  badgeContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    paddingVertical: 20,
-  },
-  badge: {
-    alignItems: "center",
-    flex: 1,
-  },
-  badgeText: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginTop: 6,
-    textAlign: "center",
-  },
   // Nút viền
-  outlineButton: {
-    borderWidth: 1,
-    borderColor: OUTLINE_BUTTON_COLOR,
-    borderRadius: 25,
-    paddingVertical: 12,
-    alignItems: "center",
-    marginVertical: 10,
-  },
-  outlineButtonText: {
-    color: OUTLINE_BUTTON_COLOR,
-    fontSize: 14,
-    fontWeight: "bold",
-  },
   // Section chung
   divider: {
     height: 8,
