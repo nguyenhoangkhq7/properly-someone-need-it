@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { getCloudinaryConfig } from "../config/cloudinary";
 
 export type UploadOptions = {
@@ -61,20 +62,15 @@ export const uploadImageToCloudinary = async (
   const endpoint = `https://api.cloudinary.com/v1_1/${options.cloudName}/image/upload`;
   const body = buildFormData(uri, options, Date.now());
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    body,
+  const response = await axios.post(endpoint, body, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
   });
 
-  const text = await response.text();
-  console.log("Cloudinary response", response.status, text);
+  console.log("Cloudinary response", response.status, response.data);
 
-  if (!response.ok) {
-    throw new Error("Cloudinary upload failed");
-  }
-
-  const data = JSON.parse(text);
-  return data.secure_url as string;
+  return response.data.secure_url as string;
 };
 
 export const uploadMultipleImages = async (

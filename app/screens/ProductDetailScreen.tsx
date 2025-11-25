@@ -32,8 +32,7 @@ import { getUserLatLng, haversineKm, roundDistanceKm } from "../utils/distance";
 import { apiClient } from "../api/apiWrapper";
 import { useAuth } from "../context/AuthContext";
 import { chatApi, type ChatRoomSummary } from "../api/chatApi";
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import api from "../api/axiosClient";
 
 const { width } = Dimensions.get("window");
 
@@ -282,27 +281,26 @@ export default function ProductDetailScreen() {
         return;
       }
 
-      const res = await fetch(`${API_URL}/orders`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ itemId }),
-      });
-      const data = await res.json();
-      console.log("Create order response", res.status, data);
-
-      if (!res.ok) {
+      // Kiểm tra không cho phép mua sản phẩm của chính mình
+      if (user?.id === product.sellerId) {
+        Alert.alert("Lỗi", "Bạn không thể mua sản phẩm của chính mình");
         return;
       }
 
-      const order = data.order;
+      // Kiểm tra trạng thái sản phẩm
+      if (product.status !== "ACTIVE") {
+        Alert.alert("Lỗi", "Sản phẩm này không còn khả dụng để mua");
+        return;
+      }
+
+      const response = await api.post("/orders", { itemId });
       navigation.navigate("OrderDetail", {
-        orderId: order._id,
+        orderId: response.data.order._id,
       });
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error("Create order error", e);
+      const errorMessage = e?.response?.data?.message || e?.message || "Không thể tạo đơn hàng";
+      Alert.alert("Lỗi", errorMessage);
     } finally {
       // setIsBuying(false);
     }
@@ -355,7 +353,7 @@ export default function ProductDetailScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
+      <StatusBar barStyle="light-content" />
 
       {/* Header */}
       <View style={styles.header}>

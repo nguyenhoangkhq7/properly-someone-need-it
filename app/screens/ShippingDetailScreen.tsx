@@ -15,6 +15,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import colors from '../config/color';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
+import api from '../api/axiosClient';
+import axios from 'axios';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -25,7 +27,7 @@ export default function ShippingDetailScreen() {
 
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { user, accessToken } = useAuth();
+  const { user, accessToken, refreshProfile } = useAuth();
 
   const pickupAddressFromParams = (route.params as any)?.pickupAddress as string | undefined;
   const productFromParams = (route.params as any)?.product;
@@ -53,20 +55,15 @@ export default function ShippingDetailScreen() {
     } as any);
     formData.append('upload_preset', UPLOAD_PRESET);
 
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-      method: 'POST',
-      body: formData,
+    const response = await axios.post(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
     });
 
-    const text = await res.text();
-    console.log('Cloudinary response status', res.status, 'body', text);
+    console.log('Cloudinary response status', response.status, 'data', response.data);
 
-    if (!res.ok) {
-      throw new Error('Cloudinary upload failed');
-    }
-
-    const data = JSON.parse(text);
-    return data.secure_url as string;
+    return response.data.secure_url as string;
   };
 
   const uploadAllImages = async (uris: string[]): Promise<string[]> => {
@@ -114,11 +111,25 @@ export default function ShippingDetailScreen() {
     setIsSuccess(false);
 
     try {
-      if (!accessToken) {
-        navigation.navigate('Auth', { screen: 'Login' });
-        setModalVisible(false);
-        setIsLoading(false);
-        return;
+      // Ensure user is authenticated
+      if (!user) {
+        if (accessToken) {
+          // Try to refresh profile if we have token but no user
+          try {
+            await refreshProfile();
+          } catch (profileError) {
+            console.error('Failed to refresh profile:', profileError);
+            navigation.navigate('Auth', { screen: 'Login' });
+            setModalVisible(false);
+            setIsLoading(false);
+            return;
+          }
+        } else {
+          navigation.navigate('Auth', { screen: 'Login' });
+          setModalVisible(false);
+          setIsLoading(false);
+          return;
+        }
       }
 
       const localImages: string[] = productFromParams.images || [];
@@ -143,20 +154,7 @@ export default function ShippingDetailScreen() {
       };
 
       console.log('Posting item payload:', payload);
-      const res = await fetch(`${API_URL}/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.log('Create item failed:', res.status, errorText);
-        throw new Error(`Failed to create item: ${res.status}`);
-      }
+      const response = await api.post('/items', payload);
 
       setIsLoading(false);
       setIsSuccess(true);

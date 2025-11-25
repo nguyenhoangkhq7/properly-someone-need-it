@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   TouchableOpacity,
@@ -9,7 +8,9 @@ import {
   Alert,
   TextInput,
   ScrollView,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -285,7 +286,8 @@ export default function MapPickerScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
+      <StatusBar barStyle="light-content" translucent={false} />
       <Text style={styles.title}>Chọn vị trí giao dịch</Text>
       <Text style={styles.subtitle}>Nhập địa chỉ hoặc chạm lên bản đồ để chọn vị trí</Text>
 
