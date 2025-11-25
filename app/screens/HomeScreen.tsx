@@ -74,17 +74,24 @@ const HomeScreen = () => {
   const displayForYou = forYou.length > 0 ? forYou : items;
 
   // --- LẤY DỮ LIỆU TỪ ENV ---
-  // Nếu không tìm thấy trong env, sẽ dùng link mặc định (fallback)
   const shopeeLink =
     process.env.EXPO_PUBLIC_ADS_SHOPEE_LINK || "https://shopee.vn";
+
+  // Fix lỗi SVG placeholder: dùng ảnh PNG/JPG
   const bannerImage =
-    process.env.EXPO_PUBLIC_ADS_BANNER_IMAGE || "https://placehold.co/600x200";
+    process.env.EXPO_PUBLIC_ADS_BANNER_IMAGE ||
+    "https://via.placeholder.com/600x200.png";
+
+  // Lấy Title và Description từ ENV (có giá trị mặc định nếu thiếu)
+  const adsTitle = process.env.EXPO_PUBLIC_ADS_TITLE || "Siêu Sale Shopee";
+
+  const adsDescription =
+    process.env.EXPO_PUBLIC_ADS_DESCRIPTION || "Giảm giá sập sàn hôm nay!";
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={colors.background} />
 
-      {/* Header chứa icon cái chuông, ta sẽ sửa file Header bên dưới */}
       <Header />
 
       <ScrollView
@@ -103,10 +110,10 @@ const HomeScreen = () => {
         }
       >
         <View style={styles.contentPadding}>
-          {/* AdBanner sử dụng biến môi trường */}
+          {/* Sử dụng biến môi trường cho Title và Description */}
           <AdBanner
-            title="Siêu Sale Shopee"
-            description="Giảm giá lên đến 50% cho đồ điện tử"
+            title={adsTitle}
+            description={adsDescription}
             image={bannerImage}
             cta="Mua Ngay"
             url={shopeeLink}
