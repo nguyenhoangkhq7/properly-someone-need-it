@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 5,
   },
   cta: {
-    backgroundColor: "#FFFFFF", // Nền trắng
+    backgroundColor: "#000000ff", // Nền trắng
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 25, // Bo tròn dạng viên thuốc
