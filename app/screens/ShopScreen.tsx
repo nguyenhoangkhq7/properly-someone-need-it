@@ -61,7 +61,7 @@ type EligibilityState = {
 export default function ShopScreen({ route }: Props) {
   const { shop } = route.params;
   const navigation = useNavigation<any>();
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
 
   const sellerId =
     shop?.ownerId ?? shop?.sellerId ?? shop?._id ?? shop?.id ?? null;
@@ -70,6 +70,11 @@ export default function ShopScreen({ route }: Props) {
     shop?.banner ||
     shop?.avatar ||
     "https://placehold.co/600x250/11120F/F6FF00?text=Cover";
+
+  const isOwner = useMemo(() => {
+    if (!user || !sellerId) return false;
+    return user.id === sellerId;
+  }, [user, sellerId]);
 
   const [reviews, setReviews] = useState<ShopReview[]>([]);
   const [stats, setStats] = useState<ReviewStats>({
@@ -469,64 +474,29 @@ export default function ShopScreen({ route }: Props) {
               </Text>
             </View>
           </View>
-
-          {/* badges removed */}
-            {/* <View style={styles.badge}>
-              <MaterialIcon
-                name="message-reply-text-outline"
-                size={24}
-                color={colors.textSecondary}
-              />
-              <Text style={styles.badgeText}>Phản hồi nhanh</Text>
-            </View>
-            <View style={styles.badge}>
-              <MaterialIcon
-                name="truck-fast-outline"
-                size={24}
-                color={colors.textSecondary}
-              />
-              <Text style={styles.badgeText}>Gửi nhanh</Text>
-            </View>
-            <View style={styles.badge}>
-              <MaterialIcon
-                name="shield-check-outline"
-                size={24}
-                color={colors.textSecondary}
-              />
-              <Text style={styles.badgeText}>Đáng tin cậy</Text>
-            </View>
-          </View> */}
         </View>
 
         <View style={styles.divider} />
-
-        {/* <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Về Tuấn Phú</Text>
-          <Text style={styles.descriptionText}>
-            "Mình không muốn những món đồ còn giá trị phải nằm yên. Nếu nó có
-            thể phục vụ cho người khác, thì..."
-          </Text>
-        </View>
-
-        <View style={styles.divider} /> */}
-
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Đánh giá</Text>
-            <TouchableOpacity
-              onPress={handleOpenReviewModal}
-              disabled={checkingEligibility}
-            >
-              <Text
-                style={[
-                  styles.writeReviewText,
-                  (!eligibility.eligible || checkingEligibility) &&
-                    styles.writeReviewDisabled,
-                ]}
+
+            {!isOwner && (
+              <TouchableOpacity
+                onPress={handleOpenReviewModal}
+                disabled={checkingEligibility}
               >
-                {checkingEligibility ? "Đang kiểm tra..." : "Viết đánh giá"}
-              </Text>
-            </TouchableOpacity>
+                <Text
+                  style={[
+                    styles.writeReviewText,
+                    (!eligibility.eligible || checkingEligibility) &&
+                      styles.writeReviewDisabled,
+                  ]}
+                >
+                  {checkingEligibility ? "Đang kiểm tra..." : "Viết đánh giá"}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
           <View style={styles.ratingSummary}>
             <View style={styles.ratingValueWrapper}>

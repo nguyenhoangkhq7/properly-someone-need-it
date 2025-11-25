@@ -7,7 +7,8 @@ import MySellingItemDetailScreen from "../screens/MySellingItemDetailScreen";
 import MySellingItemsScreen from "../screens/MySellingItemsScreen";
 import ProfileEditScreen from "../screens/ProfileEditScreen";
 import colors from "../config/color";
-
+import ShopScreen from "../screens/ShopScreen";
+import ProductDetailScreen from "../screens/ProductDetailScreen";
 export type AccountStackParamList = {
   AccountMain: undefined;
   SellerOrders: undefined;
@@ -15,6 +16,8 @@ export type AccountStackParamList = {
   MySellingItemDetail: { itemId: string };
   MySellingItems: undefined;
   ProfileEdit: undefined;
+  ShopScreen: { shop: any };
+  ProductDetail: { product: any };
 };
 
 const Stack = createStackNavigator<AccountStackParamList, "AccountStack">();
@@ -29,10 +32,9 @@ export default function AccountNavigator() {
         name="MySellingItemDetail"
         component={MySellingItemDetailScreen}
       />
-      <Stack.Screen
-        name="MySellingItems"
-        component={MySellingItemsScreen}
-      />
+      <Stack.Screen name="MySellingItems" component={MySellingItemsScreen} />
+      <Stack.Screen name="ShopScreen" component={ShopScreen} />
+      <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
       <Stack.Screen
         name="ProfileEdit"
         component={ProfileEditScreen}

@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { StackNavigationProp } from "@react-navigation/stack";
+import { Ionicons } from "@expo/vector-icons"; // 1. Import Icon
 
 // Components
 import ProfileHeader from "../components/account/ProfileHeader";
@@ -30,7 +31,7 @@ type ItemStatus = "ACTIVE" | "PENDING" | "SOLD" | "DELETED";
 const finalColors = {
   ...colors,
   warning: "#FF9800",
-  contact: "#00FFFF",
+  contact: "#00FFFF", // Màu dùng cho nút Xem Shop
   badgeBg: "#FF3B30",
   badgeText: "#FFFFFF",
 };
@@ -78,7 +79,6 @@ export default function AccountScreen() {
       const fetchBadges = async () => {
         try {
           // 1. Đơn Bán Hàng (Seller Orders)
-          // Lọc các đơn đang chờ xử lý
           const sellerOrders = await orderApi.getSellerOrders({
             userId: user.id,
           });
@@ -87,7 +87,6 @@ export default function AccountScreen() {
           ).length;
 
           // 2. Đơn Mua Hàng (Buyer Orders)
-          // Lọc các đơn đang chờ xử lý
           const buyerOrders = await orderApi.getBuyerOrders({
             userId: user.id,
           });
@@ -95,11 +94,8 @@ export default function AccountScreen() {
             isOrderActive(order.order.status)
           ).length;
 
-          // 3. Sản Phẩm Đang Bán (Items)
-          // YÊU CẦU CỦA BẠN: Chỉ tính status = "PENDING" (Chờ duyệt)
+          // 3. Sản Phẩm Đang Bán (Items) - Chỉ tính PENDING (Chờ duyệt)
           const myItems = await productApi.getBySeller(user.id);
-
-          // Lọc các item có status là PENDING
           const pendingItemsCount = myItems.filter(
             (item) => item.status === "PENDING"
           ).length;
@@ -117,6 +113,21 @@ export default function AccountScreen() {
       fetchBadges();
     }, [user])
   );
+
+  // --- 2. HÀM XỬ LÝ XEM SHOP CỦA TÔI ---
+  const handleViewMyShop = () => {
+    if (!user) return;
+
+    navigation.navigate("ShopScreen", {
+      shop: {
+        ...user,
+        _id: user.id, // ShopScreen cần _id hoặc ownerId
+        name: user.fullName || "Shop của tôi",
+        avatar: user.avatar,
+      },
+    });
+  };
+  // -------------------------------------
 
   const handleOptionPress = useCallback(
     (item: OptionItem) => {
@@ -181,6 +192,30 @@ export default function AccountScreen() {
       <StatsBalanceSection user={user} />
 
       <View style={styles.managementSection}>
+        {/* --- 3. NÚT XEM SHOP CỦA TÔI (MỚI) --- */}
+        <TouchableOpacity
+          style={[styles.badgeBtnContainer, styles.shopBtnContainer]}
+          onPress={handleViewMyShop}
+        >
+          <View style={styles.badgeBtnLeft}>
+            <Ionicons
+              name="storefront"
+              size={20}
+              color={finalColors.contact}
+              style={{ marginRight: 10 }}
+            />
+            <Text style={[styles.badgeBtnText, { color: finalColors.contact }]}>
+              Xem Shop của tôi
+            </Text>
+          </View>
+          <Ionicons
+            name="chevron-forward"
+            size={20}
+            color={finalColors.textSecondary}
+          />
+        </TouchableOpacity>
+        {/* ---------------------------------- */}
+
         <BadgeButton
           title="Đơn bán hàng"
           count={counts.sellerOrders}
@@ -267,6 +302,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  // Style riêng cho nút Shop
+  shopBtnContainer: {
+    borderColor: finalColors.contact,
+    borderWidth: 1,
+    marginBottom: 4,
   },
   badgeBtnLeft: {
     flexDirection: "row",

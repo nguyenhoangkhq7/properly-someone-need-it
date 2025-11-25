@@ -5,9 +5,9 @@ import colors from "../../config/color";
 import type { AuthUser } from "../../context/AuthContext";
 
 const finalColors = {
-    ...colors,
-    warning: "#FF9800",
-    contact: "#00FFFF",
+  ...colors,
+  warning: "#FF9800",
+  contact: "#00FFFF",
 };
 
 interface ProfileHeaderProps {
@@ -47,9 +47,6 @@ export default function ProfileHeader({ user }: ProfileHeaderProps) {
               </Text>
             )}
           </View>
-        </View>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{user?.trustScore ?? 0}% tin cậy</Text>
         </View>
       </View>
     </>
@@ -91,11 +88,20 @@ const styles = StyleSheet.create({
     height: "100%",
     resizeMode: "cover",
   },
-  avatarText: { fontSize: 28, fontWeight: "bold", color: finalColors.background },
+  avatarText: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: finalColors.background,
+  },
   userInfo: {
     justifyContent: "center",
   },
-  name: { color: finalColors.text, fontSize: 20, fontWeight: "600", marginBottom: 4 },
+  name: {
+    color: finalColors.text,
+    fontSize: 20,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
   email: { color: finalColors.textSecondary, fontSize: 14 },
   phone: { color: finalColors.textSecondary, fontSize: 14 },
   location: { color: finalColors.textSecondary, fontSize: 13, marginTop: 2 },

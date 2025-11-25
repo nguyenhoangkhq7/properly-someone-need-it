@@ -557,7 +557,7 @@ export default function ProductDetailScreen() {
         </View>
 
         {/* Related Products */}
-        {related.length > 0 && (
+        {/* {related.length > 0 && (
           <View style={[styles.section, { paddingBottom: 20 }]}>
             <Text style={styles.sectionTitle}>Sản phẩm khác từ Shop</Text>
             <FlatList
@@ -571,7 +571,7 @@ export default function ProductDetailScreen() {
               contentContainerStyle={{ gap: 12, paddingTop: 10 }}
             />
           </View>
-        )}
+        )} */}
       </ScrollView>
 
       {/* Bottom Action Bar */}
