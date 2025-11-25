@@ -32,7 +32,7 @@ import { getUserLatLng, haversineKm, roundDistanceKm } from "../utils/distance";
 import { apiClient } from "../api/apiWrapper";
 import { useAuth } from "../context/AuthContext";
 import { chatApi, type ChatRoomSummary } from "../api/chatApi";
-import api from "../api/axiosClient";
+import api, { ApiResponse } from "../api/axiosClient";
 
 const { width } = Dimensions.get("window");
 
@@ -102,7 +102,7 @@ export default function ProductDetailScreen() {
       try {
         // A. CHUẨN BỊ CÁC PROMISE
 
-        // 1. Lấy thông tin sản phẩm
+        // 1. Lấy thông tin sản phẩm (Giữ nguyên nếu productApi đã ổn, hoặc chuyển sang dùng api tương tự)
         const productPromise = productApi
           .getById(initialProduct._id, user?.id)
           .catch((err) => {
@@ -110,16 +110,23 @@ export default function ProductDetailScreen() {
             return null;
           });
 
-        // 2. Lấy thông tin Người bán (SỬA LỖI Ở ĐÂY)
-        // CẬP NHẬT: Thêm "/profile" vào cuối đường dẫn cho khớp với API Backend
-        const sellerPromise = apiClient
-          .get<SellerInfo>(`/users/${initialProduct.sellerId}/profile`)
+        // 2. Lấy thông tin Người bán (ĐÃ SỬA ĐỔI)
+        // Sử dụng api instance mới có Auth Interceptor
+        const sellerPromise = api
+          .get<ApiResponse<SellerInfo>>(
+            `/users/${initialProduct.sellerId}/profile`
+          )
+          .then((response) => {
+            // Axios trả về response, response.data là ApiResponse, response.data.data mới là SellerInfo
+            return response.data.data;
+          })
           .catch((err) => {
+            // err ở đây sẽ là ApiClientError (do interceptor đã xử lý)
             console.warn("Lỗi lấy thông tin seller:", err);
             return null;
           });
 
-        // B. THỰC THI
+        // B. THỰC THI (Phần dưới này giữ nguyên logic cũ vì sellerPromise đã trả về data sạch hoặc null)
         const [freshProduct, sellerData] = await Promise.all([
           productPromise,
           sellerPromise,
@@ -133,7 +140,7 @@ export default function ProductDetailScreen() {
         }
 
         if (sellerData) {
-          setSeller(sellerData as SellerInfo);
+          setSeller(sellerData); // Lúc này sellerData đã đúng kiểu SellerInfo
         }
 
         // D. LẤY SẢN PHẨM KHÁC (RELATED)
@@ -142,6 +149,8 @@ export default function ProductDetailScreen() {
 
         if (currentSellerId) {
           try {
+            // Nếu muốn chuyển productApi sang dùng api auth luôn thì sửa ở đây,
+            // hiện tại tôi giữ nguyên logic cũ của bạn.
             const allItems = await productApi.getAll();
             const others = allItems
               .filter(
@@ -299,7 +308,8 @@ export default function ProductDetailScreen() {
       });
     } catch (e: any) {
       console.error("Create order error", e);
-      const errorMessage = e?.response?.data?.message || e?.message || "Không thể tạo đơn hàng";
+      const errorMessage =
+        e?.response?.data?.message || e?.message || "Không thể tạo đơn hàng";
       Alert.alert("Lỗi", errorMessage);
     } finally {
       // setIsBuying(false);
