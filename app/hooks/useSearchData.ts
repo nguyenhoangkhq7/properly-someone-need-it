@@ -24,6 +24,13 @@ export const useSearchData = ({
   const fetchData = useCallback(
     async (overrideQuery?: string) => {
       setLoading(true);
+
+      // --- Helper: Lọc sản phẩm của chính mình ---
+      const filterOwnItems = (list: Item[]) => {
+        if (!userId) return list; // Nếu chưa đăng nhập (khách) thì xem hết
+        return list.filter((item) => item.sellerId !== userId);
+      };
+
       try {
         // 1. Logic cho "Gần bạn"
         if (from === "nearYou") {
@@ -33,7 +40,9 @@ export const useSearchData = ({
             origin.lng,
             10000
           ); // 10km
-          setItems(data);
+
+          // Áp dụng lọc
+          setItems(filterOwnItems(data));
           return;
         }
 
@@ -48,24 +57,24 @@ export const useSearchData = ({
           if (!data.length) {
             data = await productApi.getNewItems();
           }
-          setItems(data);
+
+          // Áp dụng lọc
+          setItems(filterOwnItems(data));
           return;
         }
 
         // 3. Logic Search thuần túy (Semantic/Text)
         const searchQuery = (overrideQuery ?? query ?? "").trim();
-
-        // Tránh search lại nếu query không đổi (trừ khi pull-to-refresh)
-        // if (lastQuery.current === searchQuery && !overrideQuery) return;
-
         lastQuery.current = searchQuery;
 
         if (searchQuery) {
           const data = await productApi.search(searchQuery, userId, 50);
-          setItems(data);
+          // Áp dụng lọc
+          setItems(filterOwnItems(data));
         } else {
           const data = await productApi.getAll(); // Empty query -> Get All
-          setItems(data);
+          // Áp dụng lọc
+          setItems(filterOwnItems(data));
         }
       } catch (e) {
         console.warn("Search fetch error", e);
