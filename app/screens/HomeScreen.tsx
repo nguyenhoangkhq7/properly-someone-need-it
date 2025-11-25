@@ -84,8 +84,8 @@ const HomeScreen = () => {
   const displayForYou = forYou.length > 0 ? forYou : items;
 
   // Link tiếp thị liên kết (Affiliate) hoặc link Shop của bạn
-  const shopeeLink =
-    "https://l.facebook.com/l.php?u=https%3A%2F%2Fvn.shp.ee%2Fm5yMrCw%3Ffbclid%3DIwZXh0bgNhZW0CMTAAYnJpZBExbVhGdkNJS3NqaUJoVEo3THNydGMGYXBwX2lkEDIyMjAzOTE3ODgyMDA4OTIAAR7mWWTHIahpg8sOLpcONUuihKWeEBLGjwqG2qKH5XDXKxsNka_XQ2eWbDbW5g_aem_iCPgy9JxoxYuavm-nMQyKA&h=AT1vkPyUaRHUV3lHv1UUNYqhjLEBpVCCwZ6aYYP9uVk-lb7BFYOvgj-OMiVEzmMEJeuVgm6OsNWOuqFePcmgUzz3r_vg-s3i-T41d-hietvlq_gEki3mvUb5rof2zfB9LigT_i5NApxqZLTGBhwj-da0ZUZDV_lc&__tn__=-UK-R&c[0]=AT3bgmMqh627E68wlN8cohhHhCKxZFARHnVNbgW-m0G69E24dA7-kg9IBVhWZCANgyoh3mRPHQGz13azyQNrlbZINwZe3FMbCiw-YCqLarkwxKnHxWM1ma5ZMfPqTcmvTgSQWuR2YsOSBTOPQW9UgI2P1h18iRyrR0naGyblwh2mVIe26742nJivDg33Aq2nt_KPP_U_G4Ns0MpBfegMe0X9rUEmwxk";
+  // Dùng link trực tiếp thay vì link redirect Facebook để tránh bị chặn mở URL
+  const shopeeLink = "https://vn.shp.ee/m5yMrCw";
 
   // Ảnh banner Shopee (bạn nên dùng ảnh có tỉ lệ ngang)
   const bannerImage =
@@ -133,7 +133,16 @@ const HomeScreen = () => {
             setSearchQuery={setSearchQuery}
             onSearchPress={handleSearch}
           />
-          <Banner />
+          <Banner
+            onPress={() =>
+              navigation.navigate("SearchResults", {
+                query: "",
+                from: "search",
+                userId,
+                coords,
+              })
+            }
+          />
 
           {/* Dành cho bạn */}
           <ProductList

@@ -8,10 +8,15 @@ import { StatusBar } from "react-native";
 import colors from "./app/config/color";
 
 function RootNavigator() {
-  const { userToken } = useAuth(); // <-- Bây giờ hook này sẽ hoạt động
+  const { userToken, isLoading } = useAuth(); // kiểm tra token + trạng thái boot
+
+  // Giữ màn trắng khi đang hydrate token để tránh nháy màn
+  if (isLoading) {
+    return null;
+  }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer key={userToken ? "app" : "auth"}>
       {userToken ? <AppNavigator /> : <AuthNavigator />}
     </NavigationContainer>
   );
