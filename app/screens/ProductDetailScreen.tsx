@@ -266,15 +266,15 @@ export default function ProductDetailScreen() {
     });
   };
 
-  const handleToggleSave = () => {
-    if (savedItem) setSavedItem(null); // Logic gọi API delete save ở đây
-    else
-      setSavedItem({
-        itemId: product._id,
-        savedAt: new Date().toISOString(),
-        title: product.title,
-      }); // Logic gọi API save ở đây
-  };
+  // const handleToggleSave = () => {
+  //   if (savedItem) setSavedItem(null); // Logic gọi API delete save ở đây
+  //   else
+  //     setSavedItem({
+  //       itemId: product._id,
+  //       savedAt: new Date().toISOString(),
+  //       title: product.title,
+  //     }); // Logic gọi API save ở đây
+  // };
 
   // Hàm chọn mua ngay (Phúc Vinh)
   const createOrder = async () => {
@@ -374,13 +374,13 @@ export default function ProductDetailScreen() {
           <Icon name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.iconBtn} onPress={handleToggleSave}>
+          {/* <TouchableOpacity style={styles.iconBtn} onPress={handleToggleSave}>
             <Icon
               name={savedItem ? "heart" : "heart-outline"}
               size={24}
               color={savedItem ? colors.primary : colors.text}
             />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
           <TouchableOpacity style={styles.iconBtn} onPress={handleShareProduct}>
             <Icon name="share-social-outline" size={24} color={colors.text} />
           </TouchableOpacity>
