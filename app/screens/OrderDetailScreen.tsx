@@ -15,11 +15,7 @@ import Icon from "react-native-vector-icons/Ionicons";
 import colors from "../config/color";
 import { useAuth } from "../context/AuthContext";
 import { orderApi } from "../api/orderApi";
-import type {
-  Order,
-  OrderPartySummary,
-  OrderStatus,
-} from "../types/Order";
+import type { Order, OrderPartySummary, OrderStatus } from "../types/Order";
 import type { Item } from "../types/Item";
 import type { ApiClientError } from "../api/axiosClient";
 
@@ -27,7 +23,7 @@ export default function OrderDetailScreen() {
   const route = useRoute<any>();
   const { orderId } = route.params || {};
   const navigation = useNavigation<any>();
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
 
   const [order, setOrder] = useState<Order | null>(null);
   const [item, setItem] = useState<Item | null>(null);
@@ -156,30 +152,38 @@ export default function OrderDetailScreen() {
   const coords = order.meetupLocation?.location?.coordinates || [];
   const hasCoords = coords.length === 2;
 
+  // --- LOGIC MỚI: Xác định vai trò ---
+  const isSeller = user?.id === order.sellerId;
+
   const handleCancelOrder = () => {
-    Alert.alert(
-      "Hủy đơn mua",
-      "Bạn chắc chắn muốn hủy đơn hàng này?",
-      [
-        { text: "Không", style: "cancel" },
-        {
-          text: "Hủy đơn",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setCanceling(true);
-              await orderApi.updateStatus(order._id, "CANCELLED");
-              setOrder((prev) => (prev ? { ...prev, status: "CANCELLED" } : prev));
-            } catch (e: any) {
-              const apiError = e as ApiClientError;
-              Alert.alert("Không hủy được", apiError?.message || "Có lỗi xảy ra");
-            } finally {
-              setCanceling(false);
-            }
-          },
+    // Xác định nội dung Alert dựa trên vai trò
+    const alertTitle = isSeller ? "Từ chối đơn hàng" : "Hủy đơn mua";
+    const alertMessage = isSeller
+      ? "Bạn chắc chắn muốn từ chối bán đơn hàng này?"
+      : "Bạn chắc chắn muốn hủy đơn hàng này?";
+    const confirmText = isSeller ? "Từ chối" : "Hủy đơn";
+
+    Alert.alert(alertTitle, alertMessage, [
+      { text: "Không", style: "cancel" },
+      {
+        text: confirmText,
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setCanceling(true);
+            await orderApi.updateStatus(order._id, "CANCELLED");
+            setOrder((prev) =>
+              prev ? { ...prev, status: "CANCELLED" } : prev
+            );
+          } catch (e: any) {
+            const apiError = e as ApiClientError;
+            Alert.alert("Thất bại", apiError?.message || "Có lỗi xảy ra");
+          } finally {
+            setCanceling(false);
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const canCancel =
@@ -191,7 +195,7 @@ export default function OrderDetailScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.navigate("HomeScreen")}
+          onPress={() => navigation.goBack()}
         >
           <Icon name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
@@ -237,7 +241,9 @@ export default function OrderDetailScreen() {
           </View>
           <View style={styles.rowBetween}>
             <Text style={styles.label}>Giá tại thời điểm mua</Text>
-            <Text style={styles.price}>{order.priceAtPurchase} đ</Text>
+            <Text style={styles.price}>
+              {order.priceAtPurchase.toLocaleString()} đ
+            </Text>
           </View>
         </View>
 
@@ -285,7 +291,13 @@ export default function OrderDetailScreen() {
             disabled={canceling}
           >
             <Text style={styles.cancelText}>
-              {canceling ? "Đang hủy..." : "HỦY ĐƠN MUA"}
+              {
+                canceling
+                  ? "Đang xử lý..."
+                  : isSeller
+                  ? "TỪ CHỐI ĐƠN"
+                  : "HỦY ĐƠN MUA" // Đổi text nút
+              }
             </Text>
           </TouchableOpacity>
         )}
@@ -427,7 +439,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: colors.red,
+    backgroundColor: colors.red || "#ef4444", // Fallback nếu colors.red chưa định nghĩa
     alignItems: "center",
   },
   cancelText: {
