@@ -39,6 +39,8 @@ export interface OrderPartySummary {
   fullName?: string;
   avatar?: string | null;
   phone?: string | null;
+  rating?: number;
+  reviewCount?: number;
 }
 
 export interface OrderListEntryBase {

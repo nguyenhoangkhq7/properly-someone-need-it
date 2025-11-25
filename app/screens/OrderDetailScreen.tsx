@@ -18,6 +18,7 @@ import { orderApi } from "../api/orderApi";
 import type { Order, OrderPartySummary, OrderStatus } from "../types/Order";
 import type { Item } from "../types/Item";
 import type { ApiClientError } from "../api/axiosClient";
+import color from "../config/color";
 
 export default function OrderDetailScreen() {
   const route = useRoute<any>();
@@ -152,11 +153,25 @@ export default function OrderDetailScreen() {
   const coords = order.meetupLocation?.location?.coordinates || [];
   const hasCoords = coords.length === 2;
 
-  // --- LOGIC MỚI: Xác định vai trò ---
   const isSeller = user?.id === order.sellerId;
 
+  // --- LOGIC MỚI: XỬ LÝ ĐÁNH GIÁ SHOP ---
+  const handleRateShop = () => {
+    // Điều hướng sang ShopScreen, truyền thông tin Seller vào params 'shop'
+    // ShopScreen sẽ tự động hiển thị modal đánh giá nếu người dùng bấm nút viết đánh giá
+    navigation.navigate("ShopScreen", {
+      shop: {
+        _id: seller?._id || order.sellerId, // ID của shop/seller
+        ownerId: seller?._id || order.sellerId,
+        name: seller?.fullName || "Người bán",
+        avatar: seller?.avatar,
+        rating: seller?.rating,
+        reviewCount: seller?.reviewCount,
+      },
+    });
+  };
+
   const handleCancelOrder = () => {
-    // Xác định nội dung Alert dựa trên vai trò
     const alertTitle = isSeller ? "Từ chối đơn hàng" : "Hủy đơn mua";
     const alertMessage = isSeller
       ? "Bạn chắc chắn muốn từ chối bán đơn hàng này?"
@@ -186,8 +201,12 @@ export default function OrderDetailScreen() {
     ]);
   };
 
+  // Điều kiện hiển thị nút Hủy
   const canCancel =
     order.status !== "CANCELLED" && order.status !== "COMPLETED";
+
+  // Điều kiện hiển thị nút Đánh giá: Đã hoàn thành VÀ Tôi là người mua
+  const canRate = order.status === "COMPLETED" && !isSeller;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -284,6 +303,9 @@ export default function OrderDetailScreen() {
           </View>
         </View>
 
+        {/* --- NÚT HÀNH ĐỘNG --- */}
+
+        {/* 1. Nút Hủy / Từ chối */}
         {canCancel && (
           <TouchableOpacity
             style={[styles.cancelButton, canceling && { opacity: 0.6 }]}
@@ -291,14 +313,25 @@ export default function OrderDetailScreen() {
             disabled={canceling}
           >
             <Text style={styles.cancelText}>
-              {
-                canceling
-                  ? "Đang xử lý..."
-                  : isSeller
-                  ? "TỪ CHỐI ĐƠN"
-                  : "HỦY ĐƠN MUA" // Đổi text nút
-              }
+              {canceling
+                ? "Đang xử lý..."
+                : isSeller
+                ? "TỪ CHỐI ĐƠN"
+                : "HỦY ĐƠN MUA"}
             </Text>
+          </TouchableOpacity>
+        )}
+
+        {/* 2. Nút Đánh giá Shop (Chỉ hiện khi hoàn thành và là người mua) */}
+        {canRate && (
+          <TouchableOpacity style={styles.rateButton} onPress={handleRateShop}>
+            <Icon
+              name="star"
+              size={18}
+              color={color.background}
+              style={{ marginRight: 8 }}
+            />
+            <Text style={styles.rateText}>ĐÁNH GIÁ NGƯỜI BÁN</Text>
           </TouchableOpacity>
         )}
       </ScrollView>
@@ -335,6 +368,7 @@ const styles = StyleSheet.create({
   },
   container: {
     padding: 12,
+    paddingBottom: 40, // Thêm padding bottom để nút không sát đáy quá
     backgroundColor: colors.background,
   },
   center: {
@@ -439,12 +473,34 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: colors.red || "#ef4444", // Fallback nếu colors.red chưa định nghĩa
+    backgroundColor: colors.red || "#ef4444",
     alignItems: "center",
   },
   cancelText: {
     color: "#fff",
     fontWeight: "700",
+    fontSize: 15,
+  },
+  // Style cho nút đánh giá mới
+  rateButton: {
+    marginTop: 4,
+    marginBottom: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: colors.primary || "#FF6B00", // Màu chủ đạo
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    // Shadow cho nổi bật
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  rateText: {
+    color: colors.background, // Chữ trắng trên nền màu
+    fontWeight: "900",
     fontSize: 15,
   },
 });
