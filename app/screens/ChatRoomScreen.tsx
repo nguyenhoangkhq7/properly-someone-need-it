@@ -31,6 +31,7 @@ import {
 import { getChatSocket } from "../utils/chatSocket";
 import { useAuth } from "../context/AuthContext";
 
+// ... (Phần hằng số màu sắc finalColors, FALLBACK_AVATAR giữ nguyên) ...
 const finalColors = {
   ...colors,
   text: colors.text ?? "#EDEDED",
@@ -49,14 +50,9 @@ const TYPING_DEBOUNCE_MS = 500;
 const FALLBACK_AVATAR = "https://ui-avatars.com/api/?name=User";
 
 export default function ChatRoomScreen({ route, navigation }: any) {
-  // 1. Nhận params:
-  // - room: Nếu vào từ danh sách chat (đã có roomId thật).
-  // - chat: Nếu vào từ trang sản phẩm (chưa có roomId thật, chỉ có sellerId nằm trong chat.roomId).
   const { room, chat, prefillMessage } = route.params || {};
-
   const { accessToken, user } = useAuth();
 
-  // Xác định thông tin hiển thị (Header)
   const displayInfo = useMemo(
     () => ({
       name: room?.peer?.name || chat?.name || "Người dùng",
@@ -65,8 +61,6 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     [room, chat]
   );
 
-  // State
-  // Nếu có room.roomId thì dùng luôn, nếu không thì null đợi API trả về
   const [activeRoomId, setActiveRoomId] = useState<string | null>(
     room?.roomId || null
   );
@@ -76,7 +70,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const [isPeerTyping, setIsPeerTyping] = useState(false);
   const [inputText, setInputText] = useState(prefillMessage ?? "");
 
-  // Refs
+  // ... (Phần Refs và Timeline data giữ nguyên) ...
   type TimelineItem =
     | { type: "divider"; id: string; label: string }
     | { type: "message"; id: string; payload: ChatMessage };
@@ -100,7 +94,8 @@ export default function ChatRoomScreen({ route, navigation }: any) {
 
     const sameDay = targetDate.toDateString() === today.toDateString();
     if (sameDay) return "Hôm nay";
-    if (targetDate.toDateString() === yesterday.toDateString()) return "Hôm qua";
+    if (targetDate.toDateString() === yesterday.toDateString())
+      return "Hôm qua";
 
     return targetDate.toLocaleDateString();
   };
@@ -123,26 +118,17 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     return items;
   }, [messages]);
 
-  const latestMessageId = messages[messages.length - 1]?.id;
-
-  // --- 1. LOGIC KHỞI TẠO PHÒNG CHAT (QUAN TRỌNG) ---
+  // --- 1. INIT ROOM ---
   useEffect(() => {
     let mounted = true;
-
     const initializeRoom = async () => {
-      // Trường hợp A: Đã có Room ID xịn (từ danh sách chat)
       if (room?.roomId) {
         setActiveRoomId(room.roomId);
         return;
       }
-
-      // Trường hợp B: Vào từ trang sản phẩm (cần tìm/tạo phòng)
-      // Lúc này 'chat.roomId' thực chất đang chứa 'sellerId' (do ta truyền bên ProductDetail)
       if (chat?.roomId) {
         try {
-          // Gọi API Backend POST /initiate
           const realRoom = await chatApi.initiateChat(chat.roomId);
-
           if (mounted && realRoom?.roomId) {
             setActiveRoomId(realRoom.roomId);
           }
@@ -155,28 +141,15 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         }
       }
     };
-
     initializeRoom();
     return () => {
       mounted = false;
     };
-  }, [room, chat, navigation]); // Thêm navigation vào dep
+  }, [room, chat, navigation]);
 
-  // --- 2. XỬ LÝ MESSAGE LIST ---
-  const appendMessage = useCallback((message: ChatMessage) => {
-    setMessages((prev) => {
-      // Check duplicate
-      if (prev.some((m) => m.id === message.id)) return prev;
-      return [...prev, message];
-    });
-    // Auto scroll
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-  }, []);
-
-  // Fetch tin nhắn khi đã có activeRoomId
+  // --- 2. LOAD MESSAGES ---
   useEffect(() => {
     if (!activeRoomId) return;
-
     let mounted = true;
     const fetchMessages = async () => {
       setIsLoadingMessages(true);
@@ -189,29 +162,38 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         if (mounted) setIsLoadingMessages(false);
       }
     };
-
     fetchMessages();
     return () => {
       mounted = false;
     };
   }, [activeRoomId]);
 
-  useEffect(() => {
-    if (!activeRoomId) return;
-    chatApi.markAsRead(activeRoomId).catch(() => {});
-  }, [activeRoomId, latestMessageId]);
-
-  // --- 3. SOCKET EVENTS ---
+  // --- 3. SOCKET LOGIC (ĐÃ SỬA) ---
   useEffect(() => {
     if (!chatSocket || !activeRoomId) return;
 
-    // Join Room
+    // A. Join Room ngay lập tức
     chatSocket.emit("room:join", { roomId: activeRoomId });
 
+    // B. Handler nhận tin nhắn mới
     const handleNewMessage = (message: ChatMessage) => {
+      console.log("Client received message:", message); // Debug log
+
+      // Chỉ xử lý nếu tin nhắn thuộc phòng này
       if (message.roomId === activeRoomId) {
-        appendMessage(message);
-        // Mark Read
+        setMessages((prev) => {
+          // Tránh trùng lặp nếu server gửi ack và emit cùng lúc
+          if (prev.some((m) => m.id === message.id)) return prev;
+          return [...prev, message];
+        });
+
+        // Scroll xuống dưới
+        setTimeout(
+          () => flatListRef.current?.scrollToEnd({ animated: true }),
+          100
+        );
+
+        // Mark read nếu là tin nhắn của người khác
         if (message.senderId !== user?.id) {
           chatApi.markAsRead(activeRoomId).catch(() => {});
         }
@@ -228,22 +210,24 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       }
     };
 
-    chatSocket.on("message:new", handleNewMessage);
-    chatSocket.on("typing:update", handleTyping);
+    // C. Lắng nghe sự kiện (TÊN SỰ KIỆN ĐÃ ĐƯỢC CHUẨN HÓA)
+    chatSocket.on("message:created", handleNewMessage); // Đổi từ message:new -> message:created
+    chatSocket.on("typing:updated", handleTyping); // Đổi từ typing:update -> typing:updated
 
+    // Cleanup
     return () => {
-      chatSocket.off("message:new", handleNewMessage);
-      chatSocket.off("typing:update", handleTyping);
-      chatSocket.emit("room:leave", { roomId: activeRoomId });
+      chatSocket.off("message:created", handleNewMessage);
+      chatSocket.off("typing:updated", handleTyping);
+      // Không cần emit leave room trừ khi cần thiết, để tránh mất kết nối khi reload nhanh
     };
-  }, [chatSocket, activeRoomId, user?.id, appendMessage]);
+  }, [chatSocket, activeRoomId, user?.id]);
 
   // --- 4. GỬI TIN NHẮN ---
   const sendMessage = useCallback(async () => {
     const content = inputText.trim();
     if (!content || !activeRoomId) return;
 
-    setInputText(""); // Optimistic UI update
+    setInputText("");
 
     try {
       if (chatSocket && chatSocket.connected) {
@@ -251,26 +235,36 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           "message:send",
           { roomId: activeRoomId, content },
           (response: any) => {
+            // Xử lý Ack (Phản hồi trực tiếp từ server cho người gửi)
             if (response?.success && response?.data) {
-              appendMessage(response.data);
-            } else {
-              // Socket fail -> fallback API hoặc báo lỗi
-              // alert("Gửi lỗi socket");
+              const msg = response.data;
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === msg.id)) return prev;
+                return [...prev, msg];
+              });
+              setTimeout(
+                () => flatListRef.current?.scrollToEnd({ animated: true }),
+                100
+              );
             }
           }
         );
       } else {
-        // Fallback HTTP
+        // Fallback API
         const msg = await chatApi.sendMessage(activeRoomId, content);
-        appendMessage(msg);
+        setMessages((prev) => [...prev, msg]);
+        setTimeout(
+          () => flatListRef.current?.scrollToEnd({ animated: true }),
+          100
+        );
       }
     } catch (error) {
       Alert.alert("Lỗi", "Không thể gửi tin nhắn.");
-      setInputText(content); // Rollback text
+      setInputText(content);
     }
-  }, [inputText, activeRoomId, chatSocket, appendMessage]);
+  }, [inputText, activeRoomId, chatSocket]);
 
-  // --- 5. TYPING ---
+  // ... (Phần Typing logic giữ nguyên) ...
   const handleTypingChange = (text: string) => {
     setInputText(text);
     if (!activeRoomId || !chatSocket) return;
@@ -294,7 +288,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     }, TYPING_DEBOUNCE_MS);
   };
 
-  // --- UI SETUP ---
+  // ... (Phần UI giữ nguyên) ...
   useLayoutEffect(() => {
     navigation.getParent()?.setOptions({ tabBarStyle: { display: "none" } });
     return () => {
@@ -302,12 +296,18 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     };
   }, [navigation]);
 
-  const connectionLabel = activeRoomId ? "Đã kết nối an toàn" : "Đang kết nối...";
+  const connectionLabel = activeRoomId
+    ? "Đã kết nối an toàn"
+    : "Đang kết nối...";
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* ... (Giữ nguyên toàn bộ phần render UI của bạn) ... */}
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+        >
           <Ionicons name="chevron-back" size={24} color={finalColors.text} />
         </TouchableOpacity>
         <View style={styles.topBarInfo}>
@@ -332,7 +332,10 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         end={{ x: 1, y: 1 }}
         style={styles.participantCard}
       >
-        <Image source={{ uri: displayInfo.avatar }} style={styles.avatarLarge} />
+        <Image
+          source={{ uri: displayInfo.avatar }}
+          style={styles.avatarLarge}
+        />
         <View style={{ flex: 1 }}>
           <Text style={styles.participantName}>{displayInfo.name}</Text>
           <Text style={styles.participantHint} numberOfLines={2}>
@@ -347,7 +350,6 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         </View>
       </LinearGradient>
 
-      {/* MESSAGES */}
       {(isLoadingMessages && !messages.length) || !activeRoomId ? (
         <View style={styles.centerLoading}>
           <ActivityIndicator color={finalColors.primary} size="large" />
@@ -413,11 +415,15 @@ export default function ChatRoomScreen({ route, navigation }: any) {
             conversationItem ? (
               <View style={styles.productCard}>
                 <Image
-                  source={{ uri: conversationItem.thumbnail ?? FALLBACK_AVATAR }}
+                  source={{
+                    uri: conversationItem.thumbnail ?? FALLBACK_AVATAR,
+                  }}
                   style={styles.productThumbnail}
                 />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.productLabel}>Sản phẩm đang trao đổi</Text>
+                  <Text style={styles.productLabel}>
+                    Sản phẩm đang trao đổi
+                  </Text>
                   <Text style={styles.productTitle} numberOfLines={1}>
                     {conversationItem.title}
                   </Text>
@@ -427,7 +433,11 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                     </Text>
                   )}
                 </View>
-                <Ionicons name="chevron-forward" size={20} color={finalColors.muted} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={finalColors.muted}
+                />
               </View>
             ) : null
           }
@@ -446,7 +456,6 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         </View>
       )}
 
-      {/* INPUT */}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
@@ -482,6 +491,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   );
 }
 
+// Styles giữ nguyên như cũ
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: finalColors.background },
   topBar: {
@@ -530,7 +540,11 @@ const styles = StyleSheet.create({
     backgroundColor: finalColors.success,
     marginRight: 6,
   },
-  connectionLabel: { color: finalColors.textSecondary, fontSize: 12, fontWeight: "600" },
+  connectionLabel: {
+    color: finalColors.textSecondary,
+    fontSize: 12,
+    fontWeight: "600",
+  },
   centerLoading: { flex: 1, justifyContent: "center", alignItems: "center" },
   productCard: {
     flexDirection: "row",
@@ -566,7 +580,11 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     marginBottom: 12,
   },
-  dayDividerText: { color: finalColors.textSecondary, fontSize: 12, fontWeight: "600" },
+  dayDividerText: {
+    color: finalColors.textSecondary,
+    fontSize: 12,
+    fontWeight: "600",
+  },
   msgRow: { flexDirection: "row", marginBottom: 12, alignItems: "flex-end" },
   msgRowLeft: { justifyContent: "flex-start" },
   msgRowRight: { justifyContent: "flex-end" },
